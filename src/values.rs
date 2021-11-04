@@ -738,6 +738,12 @@ impl<R: RealNumberInternalTrait> Value<R> {
     }
 }
 
+impl<R: RealNumberInternalTrait> Default for Value<R> {
+    fn default() -> Self {
+        Value::Void
+    }
+}
+
 impl<R: RealNumberInternalTrait> Display for Value<R> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
