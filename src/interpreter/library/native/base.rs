@@ -524,7 +524,7 @@ fn builtin_vector_set() -> Result<()> {
         let arguments = vec![
             vector.clone(),
             Value::Number(Number::Integer(0)),
-            Value::Number(Number::Real(std::f32::consts::PI)),
+            Value::Number(Number::Real(3.14)),
         ];
         assert_eq!(vector_set(arguments), Ok(Value::Void));
         assert_eq!(
