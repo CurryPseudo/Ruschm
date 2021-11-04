@@ -3,27 +3,27 @@ use crate::parser::*;
 use crate::values::*;
 use crate::{environment::*, interpreter::*};
 use crate::{error::ErrorData, error::ToLocated};
+use std::cmp::Ordering;
 use std::rc::Rc;
 
-fn apply<R: RealNumberInternalTrait>(
-    arguments: impl IntoIterator<Item = Value<R>>,
-    env: Rc<Environment<R>>,
-) -> Result<Value<R>> {
-    let mut iter = arguments.into_iter();
-    let proc = iter.next().unwrap().expect_procedure()?;
-    let mut args = iter.collect::<ArgVec<R>>();
-    if !args.is_empty() {
-        let extended = args.pop().unwrap();
+struct Apply;
+impl<R: RealNumberInternalTrait> ImpureBuiltinProcedure<R> for Apply {
+    fn eval(&self, arguments: ArgVec<R>, env: Rc<Environment<R>>) -> Result<Value<R>> {
+        let mut iter = arguments.into_iter();
+        let proc = iter.next().unwrap().expect_procedure()?;
+        let mut args = iter.collect::<ArgVec<R>>();
+        if !args.is_empty() {
+            let extended = args.pop().unwrap();
 
-        let extended = match extended {
-            Value::Pair(p) => p.into_iter().collect::<ArgVec<R>>(),
-            other => return error!(LogicError::TypeMisMatch(other.to_string(), Type::Pair))?,
-        };
-        args.extend(extended);
+            let extended = match extended {
+                Value::Pair(p) => p.into_iter().collect::<ArgVec<R>>(),
+                other => return error!(LogicError::TypeMisMatch(other.to_string(), Type::Pair)),
+            };
+            args.extend(extended);
+        }
+        Interpreter::apply_procedure(&proc, args, &env)
     }
-    Interpreter::apply_procedure(&proc, args, &env)
 }
-
 fn car<R: RealNumberInternalTrait>(
     arguments: impl IntoIterator<Item = Value<R>>,
 ) -> Result<Value<R>> {
@@ -85,7 +85,7 @@ fn eqv<R: RealNumberInternalTrait>(
         (Value::Vector(a), Value::Vector(b)) => Ok(Value::Boolean(a.ptr_eq(b))),
         (Value::Pair(a), Value::Pair(b)) => Ok(Value::Boolean(match (a.as_ref(), b.as_ref()) {
             (GenericPair::Empty, GenericPair::Empty) => true,
-            _ => a.as_ref() as *const Pair<R> == b.as_ref() as *const Pair<R>,
+            _ => std::ptr::eq(a.as_ref(), b.as_ref()),
         })),
         (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a.exact_eqv(b))),
         _ => Ok(Value::Boolean(a == b)),
@@ -158,7 +158,7 @@ fn add<R: RealNumberInternalTrait>(
     arguments
         .into_iter()
         .try_fold(Number::Integer(0), |a, b| Ok(a + b.expect_number()?))
-        .map(|num| Value::Number(num))
+        .map(Value::Number)
 }
 
 #[test]
@@ -198,7 +198,7 @@ fn sub<R: RealNumberInternalTrait>(
         None => Number::Integer(0) - first,
     };
     iter.try_fold(init, |a, b| Ok(a - b.expect_number()?))
-        .map(|num| Value::Number(num))
+        .map(Value::Number)
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn mul<R: RealNumberInternalTrait>(
     arguments
         .into_iter()
         .try_fold(Number::Integer(1), |a, b| Ok(a * b.expect_number()?))
-        .map(|num| Value::Number(num))
+        .map(Value::Number)
 }
 
 #[test]
@@ -269,8 +269,8 @@ fn div<R: RealNumberInternalTrait>(
         Some(value) => (first / value.expect_number()?)?,
         None => (Number::Integer(1) / first)?,
     };
-    iter.try_fold(init, |a, b| Ok((a / b.expect_number()?)?))
-        .map(|num| Value::Number(num))
+    iter.try_fold(init, |a, b| (a / b.expect_number()?))
+        .map(Value::Number)
 }
 
 #[test]
@@ -436,7 +436,7 @@ fn builtin_vector_length() {
             Value::String("foo".to_string()),
             Value::Number(Number::Rational(5, 3)),
         ]));
-        let arguments = vec![vector.clone()];
+        let arguments = vec![vector];
         assert_eq!(
             vector_length(arguments),
             Ok(Value::Number(Number::Integer(3)))
@@ -444,7 +444,7 @@ fn builtin_vector_length() {
     }
     {
         let vector: Value<f32> = Value::Vector(ValueReference::new_immutable(vec![]));
-        let arguments = vec![vector.clone()];
+        let arguments = vec![vector];
         assert_eq!(
             vector_length(arguments),
             Ok(Value::Number(Number::Integer(0)))
@@ -488,7 +488,7 @@ fn builtin_vector_ref() {
         );
     }
     {
-        let arguments = vec![vector.clone(), Value::Number(Number::Integer(3))];
+        let arguments = vec![vector, Value::Number(Number::Integer(3))];
         assert_eq!(
             vector_ref(arguments),
             Err(ErrorData::Logic(LogicError::VectorIndexOutOfBounds).no_locate())
@@ -512,6 +512,7 @@ fn vector_set<R: RealNumberInternalTrait>(
     Ok(Value::Void)
 }
 
+#[allow(clippy::approx_constant)]
 #[test]
 fn builtin_vector_set() -> Result<()> {
     let vector: Value<f32> = Value::Vector(ValueReference::new_mutable(vec![
@@ -523,7 +524,7 @@ fn builtin_vector_set() -> Result<()> {
         let arguments = vec![
             vector.clone(),
             Value::Number(Number::Integer(0)),
-            Value::Number(Number::Real(3.14)),
+            Value::Number(Number::Real(std::f32::consts::PI)),
         ];
         assert_eq!(vector_set(arguments), Ok(Value::Void));
         assert_eq!(
@@ -569,7 +570,7 @@ fn builtin_vector_set() -> Result<()> {
     }
     {
         let arguments = vec![
-            vector.clone(),
+            vector,
             Value::Number(Number::Integer(3)),
             Value::Number(Number::Integer(5)),
         ];
@@ -582,12 +583,12 @@ fn builtin_vector_set() -> Result<()> {
 }
 
 fn newline<R: RealNumberInternalTrait>(_: impl IntoIterator<Item = Value<R>>) -> Result<Value<R>> {
-    println!("");
+    println!();
     Ok(Value::Void)
 }
 
 macro_rules! typed_comparision {
-    ($name:tt, $operator:tt, $expect_type: tt) => {
+    ($name:tt, $cmp_pattern:pat $(| $cmp_pattern_more:pat)*, $expect_type: tt) => {
         fn $name<R: RealNumberInternalTrait>(
             arguments: impl IntoIterator<Item = Value<R>>,
         ) -> Result<Value<R>> {
@@ -598,25 +599,29 @@ macro_rules! typed_comparision {
                     let mut last_num = first.$expect_type()?;
                     for current in iter {
                         let current_num = current.$expect_type()?;
-                        if !(last_num $operator current_num) {
-                            return Ok(Value::Boolean(false));
+                        match last_num.partial_cmp(&current_num) {
+                            Some($cmp_pattern$(|$cmp_pattern_more)*) => {}
+                            _ => return Ok(Value::Boolean(false)),
                         }
                         last_num = current_num;
                     }
                     Ok(Value::Boolean(true))
                 }
-
             }
         }
-    }
+    };
 }
 
-typed_comparision!(equals, ==, expect_number);
-typed_comparision!(greater, >, expect_number);
-typed_comparision!(greater_equal, >=, expect_number);
-typed_comparision!(less, <, expect_number);
-typed_comparision!(less_equal, <=, expect_number);
-typed_comparision!(boolean_equal, ==, expect_boolean);
+typed_comparision!(equals, Ordering::Equal, expect_number);
+typed_comparision!(greater, Ordering::Greater, expect_number);
+typed_comparision!(
+    greater_equal,
+    Ordering::Greater | Ordering::Equal,
+    expect_number
+);
+typed_comparision!(less, Ordering::Less, expect_number);
+typed_comparision!(less_equal, Ordering::Less | Ordering::Equal, expect_number);
+typed_comparision!(boolean_equal, Ordering::Equal, expect_boolean);
 
 #[test]
 fn builtin_greater() {
@@ -672,7 +677,7 @@ macro_rules! first_of_order {
                 let b = b_value.expect_number()?;
                 let oprand = upcast_oprands((a, b));
                 Ok(if a $cmp b {oprand.lhs()} else {oprand.rhs()})
-            }).map(|num| Value::Number(num))
+            }).map(Value::Number)
             }
         }
 }
@@ -727,7 +732,7 @@ fn library_map_result<R: RealNumberInternalTrait>() -> Result<Vec<(String, Value
         function_mapping!(
             "apply",
             append_variadic_param!(param_fixed!["proc"], "args"),
-            apply
+            Apply
         ),
         pure_function_mapping!("car", param_fixed!["pair"], car),
         pure_function_mapping!("cdr", param_fixed!["pair"], cdr),

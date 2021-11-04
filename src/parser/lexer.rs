@@ -49,8 +49,7 @@ impl<CharIter: Iterator<Item = char>> Iterator for Lexer<CharIter> {
 }
 
 fn is_identifier_initial(c: char) -> bool {
-    match c {
-        'a'..='z'
+    matches!(c, 'a'..='z'
         | 'A'..='Z'
         | '!'
         | '$'
@@ -66,9 +65,7 @@ fn is_identifier_initial(c: char) -> bool {
         | '@'
         | '^'
         | '_'
-        | '~' => true,
-        _ => false,
-    }
+        | '~')
 }
 
 impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
@@ -109,7 +106,7 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                             if Some('8') == self.advance(1).take()
                                 && Some('(') == self.advance(1).take()
                             {
-                                return Ok(Some(TokenData::ByteVecConsIntro));
+                                Ok(Some(TokenData::ByteVecConsIntro))
                             } else {
                                 return located_error!(
                                     SyntaxError::UnrecognizedToken,
@@ -218,20 +215,16 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
             Some(c) => {
                 let mut identifier_str = String::new();
                 identifier_str.push(c);
-                loop {
-                    if let Some(nc) = self.peekable_char_stream.peek() {
-                        match nc {
-                            _ if is_identifier_initial(*nc) => identifier_str.push(*nc),
-                            '0'..='9' | '+' | '-' | '.' | '@' => identifier_str.push(*nc),
-                            _ => {
-                                Self::test_delimiter(Some(self.location), *nc)?;
-                                break;
-                            }
+                while let Some(nc) = self.peekable_char_stream.peek() {
+                    match nc {
+                        _ if is_identifier_initial(*nc) => identifier_str.push(*nc),
+                        '0'..='9' | '+' | '-' | '.' | '@' => identifier_str.push(*nc),
+                        _ => {
+                            Self::test_delimiter(Some(self.location), *nc)?;
+                            break;
                         }
-                        self.advance(1);
-                    } else {
-                        break;
                     }
+                    self.advance(1);
                 }
                 Ok(Some(TokenData::Identifier(identifier_str)))
             }

@@ -106,17 +106,17 @@ impl Error for SchemeError {
 
 #[cfg(test)]
 pub(crate) fn convert_located<T>(datas: Vec<T>) -> Vec<Located<T>> {
-    datas.into_iter().map(|d| Located::from(d)).collect()
+    datas.into_iter().map(Located::from).collect()
 }
 
 macro_rules! error {
     ($arg:expr) => {
-        Err(ErrorData::from($arg).no_locate());
+        Err(ErrorData::from($arg).no_locate())
     };
 }
 
 macro_rules! located_error {
     ($arg:expr, $loc:expr) => {
-        Err(ErrorData::from($arg).locate($loc));
+        Err(ErrorData::from($arg).locate($loc))
     };
 }

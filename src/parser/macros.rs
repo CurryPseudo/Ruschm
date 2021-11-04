@@ -68,12 +68,13 @@ impl Debug for SyntaxPatternBody {
 
 impl SyntaxPattern {
     // backtracking pattern matching
-    fn match_datum_stream<'a>(
+    #[allow(clippy::too_many_arguments)]
+    fn match_datum_stream(
         pattern_index: usize,
         datum_index: usize,
         depth: usize,
-        patterns: &Vec<SyntaxPattern>,
-        datums: &Vec<Datum>,
+        patterns: &[SyntaxPattern],
+        datums: &[Datum],
         pattern_literals: &HashSet<String>,
         substitutions: &mut HashMap<String, (Datum, Vec<Datum>)>,
         multi_matches: Option<SyntaxPattern>,
@@ -99,7 +100,7 @@ impl SyntaxPattern {
                 )?,
                 (Some(sub_pattern), Some(sub_datum))
                     if sub_pattern.match_datum(
-                        &sub_datum,
+                        sub_datum,
                         depth + 1,
                         pattern_literals,
                         substitutions,
@@ -200,8 +201,8 @@ impl SyntaxPattern {
                     0,
                     0,
                     depth + 1,
-                    &pattern_pair.iter().cloned().collect(),
-                    &datum_pair.iter().cloned().collect(),
+                    &pattern_pair.iter().cloned().collect::<Vec<_>>(),
+                    &datum_pair.iter().cloned().collect::<Vec<_>>(),
                     pattern_literals,
                     substitutions,
                     None,
@@ -226,8 +227,8 @@ impl SyntaxPattern {
                     0,
                     0,
                     depth + 1,
-                    &sub_patterns,
-                    &sub_data,
+                    sub_patterns,
+                    sub_data,
                     pattern_literals,
                     substitutions,
                     None,
@@ -238,10 +239,7 @@ impl SyntaxPattern {
                     substitutions.insert(pattern_symbol.clone(), (datum.clone(), Vec::new()));
                     true
                 } else {
-                    match &datum_body {
-                        &DatumBody::Symbol(datum_symbol) if datum_symbol == pattern_symbol => true,
-                        _ => false,
-                    }
+                    matches!(datum_body, DatumBody::Symbol(datum_symbol) if datum_symbol == pattern_symbol)
                 }
             }
             (SyntaxPatternBody::Primitive(_), DatumBody::Primitive(_)) => true,
@@ -306,7 +304,7 @@ impl Display for SyntaxTemplateBody {
 pub type SyntaxTemplate = Located<SyntaxTemplateBody>;
 
 impl SyntaxTemplate {
-    pub fn substitude<'a>(
+    pub fn substitude(
         &self,
         substitutions: &HashMap<String, (Datum, Vec<Datum>)>,
     ) -> Result<Vec<Datum>, SchemeError> {
@@ -340,7 +338,7 @@ impl SyntaxTemplate {
             }
             SyntaxTemplateBody::Vector(vec) => {
                 let mut substituted_vec = Vec::new();
-                for sub_template_element in vec.into_iter() {
+                for sub_template_element in vec.iter() {
                     substituted_vec.extend(SyntaxTemplate::substitute_template_element(
                         sub_template_element,
                         substitutions,
@@ -390,7 +388,7 @@ impl SyntaxTemplate {
             }
             SyntaxTemplateBody::Vector(vec) => {
                 let mut new_vec = Vec::new();
-                for pair_item in vec.into_iter() {
+                for pair_item in vec.iter() {
                     match Self::substitude_ellipsis_item(&pair_item.0, substitutions, item_index)? {
                         Some(sub_datum) => new_vec.push(sub_datum),
                         None => return Ok(None),
@@ -420,9 +418,9 @@ impl SyntaxTemplate {
         })
     }
 
-    fn substitute_template_element<'a>(
+    fn substitute_template_element(
         template_element: &SyntaxTemplateElement,
-        substitutions: &'a HashMap<String, (Datum, Vec<Datum>)>,
+        substitutions: &HashMap<String, (Datum, Vec<Datum>)>,
     ) -> Result<Vec<Datum>, SchemeError> {
         match template_element {
             SyntaxTemplateElement(sub_template, true) => {

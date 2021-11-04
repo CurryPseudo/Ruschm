@@ -185,6 +185,9 @@ impl<T: Pairable> GenericPair<T> {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        matches!(self, GenericPair::Empty)
+    }
     pub fn len(&self) -> usize {
         self.iter().count()
     }
@@ -291,28 +294,23 @@ impl<T: Display + Pairable> Display for GenericPair<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(")?;
         let mut current_value = self;
-        loop {
-            match current_value {
-                GenericPair::Some(car, cdr) => {
-                    write!(f, "{}", car)?;
-                    match cdr.either_pair_ref() {
-                        Either::Left(pair) => {
-                            match pair {
-                                GenericPair::Some(_, _) => {
-                                    write!(f, " ")?;
-                                }
-                                GenericPair::Empty => (),
-                            }
-                            current_value = pair;
+        while let GenericPair::Some(car, cdr) = current_value {
+            write!(f, "{}", car)?;
+            match cdr.either_pair_ref() {
+                Either::Left(pair) => {
+                    match pair {
+                        GenericPair::Some(_, _) => {
+                            write!(f, " ")?;
                         }
-                        Either::Right(value) => {
-                            write!(f, " . {}", value)?;
-                            break;
-                        }
+                        GenericPair::Empty => (),
                     }
+                    current_value = pair;
                 }
-                GenericPair::Empty => break,
-            };
+                Either::Right(value) => {
+                    write!(f, " . {}", value)?;
+                    break;
+                }
+            }
         }
         write!(f, ")")
     }
@@ -321,7 +319,7 @@ impl<T: Display + Pairable> Display for GenericPair<T> {
 // collect as a list, return head node
 impl<T: Pairable> FromIterator<T> for GenericPair<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        Self::from_pair_iter(iter.into_iter().map(|item| PairIterItem::Proper(item))).unwrap()
+        Self::from_pair_iter(iter.into_iter().map(PairIterItem::Proper)).unwrap()
     }
 }
 
@@ -359,7 +357,7 @@ impl<T: Pairable> Iterator for IntoPairIter<T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.improper_cdr {
-            Some(_) => self.improper_cdr.take().map(|i| PairIterItem::Improper(i)),
+            Some(_) => self.improper_cdr.take().map(PairIterItem::Improper),
             None => self.pair.pop().map(|i| match i {
                 PairPopItem::Improper(car, cdr) => {
                     self.improper_cdr = Some(cdr);

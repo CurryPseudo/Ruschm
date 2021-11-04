@@ -53,9 +53,9 @@ impl<R: RealNumberInternalTrait> Display for Number<R> {
 impl<R: RealNumberInternalTrait> Number<R> {
     pub(crate) fn exact_eqv(&self, other: &Self) -> bool {
         match (self, other) {
-            (Number::Integer(a), Number::Integer(b)) => a.eq(&b),
+            (Number::Integer(a), Number::Integer(b)) => a.eq(b),
             (Number::Rational(a1, b1), Number::Rational(a2, b2)) => (a1 * b2).eq(&(b1 * a2)),
-            (Number::Real(a), Number::Real(b)) => a.eq(&b),
+            (Number::Real(a), Number::Real(b)) => a.eq(b),
             _ => false,
         }
     }
@@ -451,19 +451,21 @@ fn number_exact() {
 
 pub type ArgVec<R> = SmallVec<[Value<R>; 4]>;
 
+pub trait ImpureBuiltinProcedure<R: RealNumberInternalTrait> {
+    fn eval(&self, args: ArgVec<R>, env: Rc<Environment<R>>) -> Result<Value<R>>;
+}
+
 #[derive(Clone)]
 pub enum BuiltinProcedureBody<R: RealNumberInternalTrait> {
     Pure(fn(ArgVec<R>) -> Result<Value<R>>),
-    Impure(Rc<dyn Fn(ArgVec<R>, Rc<Environment<R>>) -> Result<Value<R>>>),
+    Impure(Rc<dyn ImpureBuiltinProcedure<R>>),
 }
 
 impl<R: RealNumberInternalTrait> PartialEq for BuiltinProcedureBody<R> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (BuiltinProcedureBody::Pure(fpa), BuiltinProcedureBody::Pure(fpb)) => fpa == fpb,
-            (BuiltinProcedureBody::Impure(fpa), BuiltinProcedureBody::Impure(fpb)) => {
-                Rc::ptr_eq(fpa, fpb)
-            }
+            (BuiltinProcedureBody::Impure(_), BuiltinProcedureBody::Impure(_)) => false,
             _ => false,
         }
     }
@@ -473,7 +475,7 @@ impl<R: RealNumberInternalTrait> BuiltinProcedureBody<R> {
     pub fn apply(&self, args: ArgVec<R>, env: &Rc<Environment<R>>) -> Result<Value<R>> {
         match &self {
             Self::Pure(pointer) => pointer(args),
-            Self::Impure(pointer) => pointer(args, env.clone()),
+            Self::Impure(proc) => proc.eval(args, env.clone()),
         }
     }
 }
@@ -535,12 +537,12 @@ impl<R: RealNumberInternalTrait> Procedure<R> {
     pub fn new_builtin_impure(
         name: String,
         parameters: ParameterFormals,
-        pointer: impl Fn(ArgVec<R>, Rc<Environment<R>>) -> Result<Value<R>> + 'static,
+        proc: impl ImpureBuiltinProcedure<R> + 'static,
     ) -> Self {
         Self::Builtin(BuiltinProcedure {
             name,
             parameters,
-            body: BuiltinProcedureBody::Impure(Rc::new(pointer)),
+            body: BuiltinProcedureBody::Impure(Rc::new(proc)),
         })
     }
     pub fn get_parameters(&self) -> &ParameterFormals {
@@ -594,7 +596,7 @@ impl<T: Display> ValueReference<Vec<T>> {
             ValueReference::Mutable(t) => Box::new(t.borrow()),
         }
     }
-    pub fn as_mut<'a>(&'a self) -> Result<RefMut<'a, Vec<T>>> {
+    pub fn as_mut(&self) -> Result<RefMut<Vec<T>>> {
         match self {
             ValueReference::Immutable(_) => error!(LogicError::RequiresMutable(self.to_string())),
             ValueReference::Mutable(t) => Ok(t.borrow_mut()),
@@ -731,10 +733,7 @@ impl<R: RealNumberInternalTrait> Value<R> {
         match_expect_type!(self, Value::Boolean(condition) => condition, Type::Boolean)
     }
     pub fn as_boolean(&self) -> bool {
-        match self {
-            Value::Boolean(false) => false,
-            _ => true,
-        }
+        !matches!(self, Value::Boolean(false))
     }
 }
 
