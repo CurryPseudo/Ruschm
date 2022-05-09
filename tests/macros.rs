@@ -5,7 +5,7 @@ use ruschm::{
 };
 
 #[test]
-fn match_list() -> Result<(), SchemeError> {
+fn match_list() -> Result<()> {
     let mut interpreter = Interpreter::<f32>::new_with_stdlib();
     assert_eq!(
         interpreter.eval(include_str!("./test_macros/macro_list.scm").chars())?,

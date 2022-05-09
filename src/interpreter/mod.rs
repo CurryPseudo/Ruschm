@@ -1,15 +1,14 @@
 #[macro_use]
 pub mod library;
-type Result<T> = std::result::Result<T, SchemeError>;
+use crate::parser::error::SyntaxError;
+use crate::Result;
 
 use error::LogicError;
+use itertools::Itertools;
 
-use crate::error::SchemeError;
 pub mod error;
 
-use crate::parser::error::SyntaxError;
 use crate::{import_library_direct, parser::*, values::Value};
-use itertools::Itertools;
 
 use crate::error::*;
 use crate::values::Procedure;
@@ -39,19 +38,16 @@ fn library_factory() -> Result<()> {
         Box::new(|| vec![("a".to_string(), Value::Void)]),
     ));
     assert_eq!(
-        it.get_library(library_name!("foo").into()),
-        Ok(Library::new(
-            library_name!("foo"),
-            vec![("a".to_string(), Value::Void)]
-        ))
+        (it.get_library(library_name!("foo").into())).unwrap(),
+        (Library::new(library_name!("foo"), vec![("a".to_string(), Value::Void)]))
     );
     it.register_library_factory(LibraryFactory::from_char_stream(
         &library_name!("foo"),
         "(define-library (foo) (export a) (begin (define a 1)))".chars(),
     )?);
     assert_eq!(
-        it.get_library(library_name!("foo").into()),
-        Ok(Library::new(
+        (it.get_library(library_name!("foo").into())).unwrap(),
+        (Library::new(
             library_name!("foo"),
             vec![("a".to_string(), Value::Number(Number::Integer(1)))]
         ))
@@ -282,10 +278,9 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
         // formals.iter_to_last(|formal| args.next)
         let (fixed_len, has_variadic) = formals.len();
         if args.len() < fixed_len || (args.len() > fixed_len && !has_variadic) {
-            return error!(LogicError::ArgumentMissMatch(
-                formals.clone(),
-                args.iter().join(" ")
-            ));
+            return Err(
+                LogicError::ArgumentMissMatch(formals.clone(), args.iter().join(" ")).into(),
+            );
         }
         let mut current_procedure = None;
         loop {
@@ -397,18 +392,14 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
                         Self::apply_procedure(&procedure, evaluated_args?, env)?
                     }
                     other => {
-                        return located_error!(
-                            LogicError::TypeMisMatch(other.to_string(), Type::Procedure),
-                            procedure_expr.location
+                        return Err(
+                            LogicError::TypeMisMatch(other.to_string(), Type::Procedure).into()
                         )
                     }
                 }
             }
             ExpressionBody::Period => {
-                return located_error!(
-                    LogicError::UnexpectedExpression(expression.clone()),
-                    expression.location
-                );
+                return Err(LogicError::UnexpectedExpression(expression.clone()).into())
             }
             ExpressionBody::Assignment(name, value_expr) => {
                 let value = Self::eval_expression(value_expr, env)?;
@@ -433,12 +424,7 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
 
             ExpressionBody::Symbol(ident) => match env.get(ident.as_str()) {
                 Some(value) => value.clone(),
-                None => {
-                    return located_error!(
-                        LogicError::UnboundedSymbol(ident.clone()),
-                        expression.location
-                    )
-                }
+                None => return Err(LogicError::UnboundedSymbol(ident.clone()).into()),
             },
         })
     }
@@ -471,10 +457,7 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
             let char_stream = file_char_stream(&path)?;
             LibraryFactory::from_char_stream(name.deref(), char_stream)
         } else {
-            located_error!(
-                LogicError::LibraryNotFound(name.deref().clone()),
-                name.location
-            )
+            Err(LogicError::LibraryNotFound(name.deref().clone()).into())
         }
     }
     fn new_library(&mut self, factory: &LibraryFactory<R>) -> Result<Library<R>> {
@@ -513,10 +496,7 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
                         .map(|(name, value)| (name.clone(), value.clone()))
                         .collect())
                 } else {
-                    located_error!(
-                        LogicError::LibraryImportCyclic(lib_name.clone().extract_data()),
-                        lib_name.location
-                    )
+                    Err(LogicError::LibraryImportCyclic(lib_name.clone().extract_data()).into())
                 }
             }
             ImportSetBody::Only(import_set, identifiers) => {
@@ -581,10 +561,11 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
                 None
             }
             _ => {
-                return error!(SyntaxError::ExpectSomething(
+                return Err(SyntaxError::ExpectSomething(
                     "expression/definition".to_string(),
                     "other statement".to_string(),
-                ))
+                )
+                .into())
             }
         })
     }
@@ -595,13 +576,14 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
         env: Rc<Environment<R>>,
     ) -> Result<Option<Value<R>>> {
         let ast_location = ast.location();
-        match self.eval_ast_error_no_location(ast, env) {
-            Ok(value) => Ok(value),
-            Err(Located { data, location }) => Err(data.locate(
-                // prevent loss accurate location
-                location.or(ast_location),
-            )),
-        }
+        self.eval_ast_error_no_location(ast, env)
+        //match self.eval_ast_error_no_location(ast, env) {
+        //    Ok(value) => Ok(value),
+        //    Err(Located { data, location }) => Err(data.locate(
+        //        // prevent loss accurate location
+        //        location.or(ast_location),
+        //    )),
+        //}
     }
 
     pub fn eval_ast_error_no_location(
@@ -616,13 +598,11 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
                     None
                 }
                 Statement::LibraryDefinition(library_definition) => {
-                    return located_error!(
-                        SyntaxError::ExpectSomething(
-                            "import declaration/expression/definition".to_string(),
-                            "other statement".to_string(),
-                        ),
-                        library_definition.location
-                    );
+                    return Err(SyntaxError::ExpectSomething(
+                        "import declaration/expression/definition".to_string(),
+                        "other statement".to_string(),
+                    )
+                    .into())
                 }
                 other => {
                     self.import_end = true;
@@ -668,12 +648,7 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
                 Some(value) => {
                     definitions.insert(to.clone(), value.clone());
                 }
-                None => {
-                    return located_error!(
-                        LogicError::UnboundedSymbol(from.clone()),
-                        export.location
-                    )
-                }
+                None => return Err(LogicError::UnboundedSymbol(from.clone()).into()),
             }
         }
         Ok(Library::new(name, definitions))
@@ -765,14 +740,18 @@ fn arithmetic() -> Result<()> {
     );
 
     assert_eq!(
-        interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
-            Box::new(Expression::from(ExpressionBody::Symbol("/".to_string()))),
-            vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Integer(0)).into()
-            ]
-        ))),
-        Err(ErrorData::Logic(LogicError::DivisionByZero).no_locate()),
+        interpreter
+            .eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
+                Box::new(Expression::from(ExpressionBody::Symbol("/".to_string()))),
+                vec![
+                    ExpressionBody::Primitive(Primitive::Integer(1)).into(),
+                    ExpressionBody::Primitive(Primitive::Integer(0)).into()
+                ]
+            )))
+            .unwrap_err()
+            .downcast::<LogicError>()
+            .unwrap(),
+        LogicError::DivisionByZero,
     );
 
     assert_eq!(
@@ -796,19 +775,27 @@ fn arithmetic() -> Result<()> {
         Value::Number(Number::Real(1.0)),
     );
     assert_eq!(
-        interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
-            Box::new(Expression::from(ExpressionBody::Symbol("min".to_string()))),
-            vec![ExpressionBody::Primitive(Primitive::String("a".to_string())).into()]
-        ))),
-        Err(ErrorData::Logic(LogicError::TypeMisMatch("a".to_string(), Type::Number)).no_locate()),
+        interpreter
+            .eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
+                Box::new(Expression::from(ExpressionBody::Symbol("min".to_string()))),
+                vec![ExpressionBody::Primitive(Primitive::String("a".to_string())).into()]
+            )))
+            .unwrap_err()
+            .downcast::<LogicError>()
+            .unwrap(),
+        LogicError::TypeMisMatch("a".to_string(), Type::Number),
     );
 
     assert_eq!(
-        interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
-            Box::new(Expression::from(ExpressionBody::Symbol("max".to_string()))),
-            vec![ExpressionBody::Primitive(Primitive::String("a".to_string())).into()]
-        ))),
-        Err(ErrorData::Logic(LogicError::TypeMisMatch("a".to_string(), Type::Number)).no_locate()),
+        interpreter
+            .eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
+                Box::new(Expression::from(ExpressionBody::Symbol("max".to_string()))),
+                vec![ExpressionBody::Primitive(Primitive::String("a".to_string())).into()]
+            )))
+            .unwrap_err()
+            .downcast::<LogicError>()
+            .unwrap(),
+        LogicError::TypeMisMatch("a".to_string(), Type::Number),
     );
 
     assert_eq!(
@@ -855,8 +842,11 @@ fn undefined() -> Result<()> {
 
     assert_eq!(
         interpreter
-            .eval_root_expression(Expression::from(ExpressionBody::Symbol("foo".to_string()))),
-        Err(ErrorData::Logic(LogicError::UnboundedSymbol("foo".to_string())).no_locate())
+            .eval_root_expression(Expression::from(ExpressionBody::Symbol("foo".to_string())))
+            .unwrap_err()
+            .downcast::<LogicError>()
+            .unwrap(),
+        LogicError::UnboundedSymbol("foo".to_string())
     );
     Ok(())
 }
@@ -1348,10 +1338,8 @@ fn search_library() -> Result<()> {
         // not exist
         let library = interpreter.get_library(library_name!("lib", "not", "exist").into());
         assert_eq!(
-            library,
-            error!(LogicError::LibraryNotFound(library_name!(
-                "lib", "not", "exist"
-            )))
+            (library).unwrap_err().downcast::<LogicError>().unwrap(),
+            (LogicError::LibraryNotFound(library_name!("lib", "not", "exist")))
         );
     }
     let lib_not_exist_factory = LibraryFactory::Native(
@@ -1587,8 +1575,8 @@ fn import_cyclic() -> Result<()> {
     )?);
     let result = it.get_library(library_name!("foo").into());
     assert_eq!(
-        result,
-        error!(LogicError::LibraryImportCyclic(library_name!("foo")))
+        (result).unwrap_err().downcast::<LogicError>().unwrap(),
+        LogicError::LibraryImportCyclic(library_name!("foo"))
     );
     Ok(())
 }
@@ -1610,7 +1598,7 @@ fn transformer() -> Result<()> {
     );
     let env = it.env;
     assert_eq!(
-        Interpreter::eval_expression(
+        (Interpreter::eval_expression(
             &ExpressionBody::ProcedureCall(
                 Box::new(ExpressionBody::Symbol("foo".to_string()).into()),
                 vec![
@@ -1621,8 +1609,9 @@ fn transformer() -> Result<()> {
             )
             .into(),
             &env,
-        ),
-        Ok(Value::Number(Number::Integer(6)))
+        ))
+        .unwrap(),
+        (Value::Number(Number::Integer(6)))
     );
     //assert_eq!(
     //    Interpreter::eval_tail_expression(
@@ -1664,8 +1653,9 @@ fn ast_location() -> Result<()> {
                 Rc::new(Environment::new())
             )
             .unwrap_err()
-            .location,
-        Some([4, 6])
+            .downcast::<SchemeErrorLocation>()
+            .unwrap(),
+        SchemeErrorLocation([4, 6])
     );
     Ok(())
 }

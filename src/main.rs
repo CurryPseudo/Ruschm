@@ -4,7 +4,7 @@ use std::{env, process::exit};
 use std::{io::Write, path::PathBuf};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-fn main() -> Result<(), error::SchemeError> {
+fn main() -> Result<()> {
     match env::args().nth(1) {
         Some(file) => {
             let mut it = Interpreter::<f32>::new();

@@ -1,4 +1,4 @@
-use crate::error::*;
+use crate::*;
 use either::Either;
 use std::{fmt::Display, iter::FromIterator, mem};
 // r7rs 6.4. Pairs and lists
@@ -152,7 +152,7 @@ impl<T: Pairable> GenericPair<T> {
         }
     }
 
-    pub fn pop_proper(&mut self) -> Result<Option<T>, SchemeError> {
+    pub fn pop_proper(&mut self) -> Result<Option<T>> {
         self.pop()
             .map(|item| match item {
                 PairPopItem::Proper(t) => Ok(t),
@@ -176,9 +176,7 @@ impl<T: Pairable> GenericPair<T> {
         IntoPairIter::from(self)
     }
 
-    pub fn from_pair_iter<I: IntoIterator<Item = PairIterItem<T>>>(
-        iter: I,
-    ) -> Result<Self, SchemeError> {
+    pub fn from_pair_iter<I: IntoIterator<Item = PairIterItem<T>>>(iter: I) -> Result<Self> {
         match T::from_pair_iter(iter.into_iter()).into_pair() {
             Either::Left(pair) => Ok(pair),
             Either::Right(_) => todo!(),
@@ -206,8 +204,8 @@ impl<T: Pairable> GenericPair<T> {
 
     pub fn map_ok<Target: Pairable>(
         self,
-        f: &mut impl FnMut(T) -> Result<Target, SchemeError>,
-    ) -> Result<GenericPair<Target>, SchemeError> {
+        f: &mut impl FnMut(T) -> Result<Target>,
+    ) -> Result<GenericPair<Target>> {
         Ok(match self {
             GenericPair::Some(car, cdr) => GenericPair::Some(
                 match car.into_pair() {
@@ -225,8 +223,8 @@ impl<T: Pairable> GenericPair<T> {
 
     pub fn map_ok_ref<Target: Pairable>(
         &self,
-        f: &mut impl FnMut(&T) -> Result<Target, SchemeError>,
-    ) -> Result<GenericPair<Target>, SchemeError> {
+        f: &mut impl FnMut(&T) -> Result<Target>,
+    ) -> Result<GenericPair<Target>> {
         Ok(match self {
             GenericPair::Some(car, cdr) => GenericPair::Some(
                 match car.either_pair_ref() {

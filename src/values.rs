@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-type Result<T> = std::result::Result<T, SchemeError>;
+use crate::Result;
 
 pub trait RealNumberInternalTrait: Display + Debug + Real + Default + 'static
 where
@@ -296,7 +296,7 @@ impl<R: RealNumberInternalTrait> Number<R> {
         match self {
             Number::Real(num) => match num.round().to_i32() {
                 Some(i) => Ok(Number::Integer(i)),
-                None => error!(LogicError::InExactConversion(num.to_string())),
+                None => Err(LogicError::InExactConversion(num.to_string()).into()),
             },
             exact => Ok(exact),
         }
@@ -340,112 +340,130 @@ fn number_ceiling() {
 #[test]
 fn number_floor_quotient() {
     assert_eq!(
-        Number::<f32>::Integer(5).floor_quotient(Number::Integer(2)),
-        Ok(Number::Integer(2))
+        (Number::<f32>::Integer(5).floor_quotient(Number::Integer(2))).unwrap(),
+        (Number::Integer(2))
     );
     assert_eq!(
-        Number::<f32>::Integer(-5).floor_quotient(Number::Integer(2)),
-        Ok(Number::Integer(-3))
+        (Number::<f32>::Integer(-5).floor_quotient(Number::Integer(2))).unwrap(),
+        (Number::Integer(-3))
     );
     assert_eq!(
-        Number::<f32>::Integer(5).floor_quotient(Number::Integer(-2)),
-        Ok(Number::Integer(-3))
+        (Number::<f32>::Integer(5).floor_quotient(Number::Integer(-2))).unwrap(),
+        (Number::Integer(-3))
     );
     assert_eq!(
-        Number::<f32>::Integer(-5).floor_quotient(Number::Integer(-2)),
-        Ok(Number::Integer(2))
+        (Number::<f32>::Integer(-5).floor_quotient(Number::Integer(-2))).unwrap(),
+        (Number::Integer(2))
     );
     assert_eq!(
-        Number::<f32>::Rational(25, 2).floor_quotient(Number::Integer(3)),
-        Ok(Number::Integer(4))
+        (Number::<f32>::Rational(25, 2).floor_quotient(Number::Integer(3))).unwrap(),
+        (Number::Integer(4))
     );
     assert_eq!(
-        Number::<f32>::Rational(-25, 2).floor_quotient(Number::Integer(3)),
-        Ok(Number::Integer(-5))
+        (Number::<f32>::Rational(-25, 2).floor_quotient(Number::Integer(3))).unwrap(),
+        (Number::Integer(-5))
     );
     assert_eq!(
-        Number::<f32>::Rational(33, 7).floor_quotient(Number::Rational(5, 2)),
-        Ok(Number::Integer(1))
+        (Number::<f32>::Rational(33, 7).floor_quotient(Number::Rational(5, 2))).unwrap(),
+        (Number::Integer(1))
     );
     assert_eq!(
-        Number::<f32>::Real(5.0).floor_quotient(Number::Real(2.0)),
-        Ok(Number::Real(2.0))
+        (Number::<f32>::Real(5.0).floor_quotient(Number::Real(2.0))).unwrap(),
+        (Number::Real(2.0))
     );
     assert_eq!(
-        Number::<f32>::Integer(-5).floor_quotient(Number::Real(2.0)),
-        Ok(Number::Real(-3.0))
+        (Number::<f32>::Integer(-5).floor_quotient(Number::Real(2.0))).unwrap(),
+        (Number::Real(-3.0))
     );
     assert_eq!(
-        Number::<f32>::Real(5.0).floor_quotient(Number::Integer(-2)),
-        Ok(Number::Real(-3.0))
+        (Number::<f32>::Real(5.0).floor_quotient(Number::Integer(-2))).unwrap(),
+        (Number::Real(-3.0))
     );
     assert_eq!(
-        Number::<f32>::Rational(-15, 2).floor_quotient(Number::Real(-3.0)),
-        Ok(Number::Real(2.0))
+        (Number::<f32>::Rational(-15, 2).floor_quotient(Number::Real(-3.0))).unwrap(),
+        (Number::Real(2.0))
     );
 }
 #[test]
 fn number_floor_remainder() {
     assert_eq!(
-        Number::<f32>::Integer(5).floor_remainder(Number::Integer(2)),
-        Ok(Number::Integer(1))
+        (Number::<f32>::Integer(5).floor_remainder(Number::Integer(2))).unwrap(),
+        (Number::Integer(1))
     );
     assert_eq!(
-        Number::<f32>::Integer(-5).floor_remainder(Number::Integer(2)),
-        Ok(Number::Integer(1))
+        (Number::<f32>::Integer(-5).floor_remainder(Number::Integer(2))).unwrap(),
+        (Number::Integer(1))
     );
     assert_eq!(
-        Number::<f32>::Integer(5).floor_remainder(Number::Integer(-2)),
-        Ok(Number::Integer(-1))
+        (Number::<f32>::Integer(5).floor_remainder(Number::Integer(-2))).unwrap(),
+        (Number::Integer(-1))
     );
     assert_eq!(
-        Number::<f32>::Integer(-5).floor_remainder(Number::Integer(-2)),
-        Ok(Number::Integer(-1))
+        (Number::<f32>::Integer(-5).floor_remainder(Number::Integer(-2))).unwrap(),
+        (Number::Integer(-1))
     );
     assert_eq!(
-        Number::<f32>::Rational(25, 2).floor_remainder(Number::Integer(3)),
-        Ok(Number::Rational(1, 2))
+        (Number::<f32>::Rational(25, 2).floor_remainder(Number::Integer(3))).unwrap(),
+        (Number::Rational(1, 2))
     );
     assert_eq!(
-        Number::<f32>::Rational(-25, 2).floor_remainder(Number::Integer(3)),
-        Ok(Number::Rational(5, 2))
+        (Number::<f32>::Rational(-25, 2).floor_remainder(Number::Integer(3))).unwrap(),
+        (Number::Rational(5, 2))
     );
     assert_eq!(
-        Number::<f32>::Rational(33, 7).floor_remainder(Number::Rational(5, 2)),
-        Ok(Number::Rational(31, 14))
+        (Number::<f32>::Rational(33, 7).floor_remainder(Number::Rational(5, 2))).unwrap(),
+        (Number::Rational(31, 14))
     );
     assert_eq!(
-        Number::<f32>::Real(5.0).floor_remainder(Number::Real(2.0)),
-        Ok(Number::Real(1.0))
+        (Number::<f32>::Real(5.0).floor_remainder(Number::Real(2.0))).unwrap(),
+        (Number::Real(1.0))
     );
     assert_eq!(
-        Number::<f32>::Integer(-5).floor_remainder(Number::Real(2.0)),
-        Ok(Number::Real(1.0))
+        (Number::<f32>::Integer(-5).floor_remainder(Number::Real(2.0))).unwrap(),
+        (Number::Real(1.0))
     );
     assert_eq!(
-        Number::<f32>::Real(5.0).floor_remainder(Number::Integer(-2)),
-        Ok(Number::Real(-1.0))
+        (Number::<f32>::Real(5.0).floor_remainder(Number::Integer(-2))).unwrap(),
+        (Number::Real(-1.0))
     );
     assert_eq!(
-        Number::<f32>::Rational(-15, 2).floor_remainder(Number::Real(-3.0)),
-        Ok(Number::Real(-1.5))
+        (Number::<f32>::Rational(-15, 2).floor_remainder(Number::Real(-3.0))).unwrap(),
+        (Number::Real(-1.5))
     );
 }
 
 #[test]
 fn number_exact() {
-    assert_eq!(Number::<f32>::Integer(5).exact(), Ok(Number::Integer(5)));
-    assert_eq!(Number::<f32>::Real(5.3).exact(), Ok(Number::Integer(5)));
-    assert_eq!(Number::<f32>::Real(5.8).exact(), Ok(Number::Integer(6)));
-    assert_eq!(Number::<f32>::Real(-5.8).exact(), Ok(Number::Integer(-6)));
-    assert_eq!(Number::<f32>::Real(-5.3).exact(), Ok(Number::Integer(-5)));
     assert_eq!(
-        Number::<f32>::Real(1e30).exact(),
-        error!(LogicError::InExactConversion(1e30.to_string())),
+        (Number::<f32>::Integer(5).exact()).unwrap(),
+        (Number::Integer(5))
     );
     assert_eq!(
-        Number::<f32>::Rational(7, 3).exact(),
-        Ok(Number::Rational(7, 3))
+        (Number::<f32>::Real(5.3).exact()).unwrap(),
+        (Number::Integer(5))
+    );
+    assert_eq!(
+        (Number::<f32>::Real(5.8).exact()).unwrap(),
+        (Number::Integer(6))
+    );
+    assert_eq!(
+        (Number::<f32>::Real(-5.8).exact()).unwrap(),
+        (Number::Integer(-6))
+    );
+    assert_eq!(
+        (Number::<f32>::Real(-5.3).exact()).unwrap(),
+        (Number::Integer(-5))
+    );
+    assert_eq!(
+        (Number::<f32>::Real(1e30).exact())
+            .unwrap_err()
+            .downcast::<LogicError>()
+            .unwrap(),
+        (LogicError::InExactConversion(1e30.to_string()))
+    );
+    assert_eq!(
+        (Number::<f32>::Rational(7, 3).exact()).unwrap(),
+        (Number::Rational(7, 3))
     );
 }
 
@@ -598,7 +616,9 @@ impl<T: Display> ValueReference<Vec<T>> {
     }
     pub fn as_mut(&self) -> Result<RefMut<Vec<T>>> {
         match self {
-            ValueReference::Immutable(_) => error!(LogicError::RequiresMutable(self.to_string())),
+            ValueReference::Immutable(_) => {
+                Err(LogicError::RequiresMutable(self.to_string()).into())
+            }
             ValueReference::Mutable(t) => Ok(t.borrow_mut()),
         }
     }
@@ -617,34 +637,35 @@ macro_rules! match_expect_type {
     ($value:expr, $type:pat => $inner: expr, $type_name:expr) => {
         match $value {
             $type => Ok($inner),
-            _ => Err(
-                ErrorData::Logic(LogicError::TypeMisMatch($value.to_string(), $type_name))
-                    .no_locate(),
-            ),
+            _ => Err(LogicError::TypeMisMatch($value.to_string(), $type_name).into()),
         }
     };
 }
 #[test]
 fn macro_match_expect_type() {
     assert_eq!(
-        match_expect_type!(
+        (match_expect_type!(
             Value::<f32>::Number(Number::Integer(5)),
             Value::Number(Number::Integer(i)) => i, Type::Integer
-        ),
-        Ok(5)
+        ))
+        .unwrap(),
+        (5)
     );
     assert_eq!(
-        match_expect_type!(
+        (match_expect_type!(
             Value::<f32>::Number(Number::Integer(1)),
-            Value::Number(Number::Integer(i)) => i + 3, Type::Integer),
-        Ok(4)
+            Value::Number(Number::Integer(i)) => i + 3, Type::Integer))
+        .unwrap(),
+        (4)
     );
     assert_eq!(
-        match_expect_type!(
+        Result::<String, anyhow::Error>::unwrap_err(match_expect_type!(
             Value::<f32>::Number(Number::Integer(5)),
             Value::String(s) => s, Type::String
-        ),
-        error!(LogicError::TypeMisMatch(5.to_string(), Type::String))
+        ))
+        .downcast::<LogicError>()
+        .unwrap(),
+        (LogicError::TypeMisMatch(5.to_string(), Type::String))
     );
 }
 
@@ -765,7 +786,7 @@ impl<R: RealNumberInternalTrait> Display for Value<R> {
 
 fn check_division_by_zero(num: i32) -> Result<()> {
     match num {
-        0 => error!(LogicError::DivisionByZero),
+        0 => Err(LogicError::DivisionByZero.into()),
         _ => Ok(()),
     }
 }

@@ -1,4 +1,5 @@
 use crate::error::*;
+use crate::*;
 use either::Either;
 use itertools::Itertools;
 use std::fmt::Display;
@@ -59,26 +60,24 @@ impl Display for DatumBody {
 }
 
 impl Datum {
-    pub fn expect_list(self) -> Result<DatumList, SchemeError> {
+    pub fn expect_list(self) -> Result<DatumList> {
         match self.data {
             DatumBody::Pair(inner) => Ok(*inner),
             _ => {
-                return error!(SyntaxError::ExpectSomething(
-                    "list/pair".to_string(),
-                    self.to_string()
-                ))
+                return Err(
+                    SyntaxError::ExpectSomething("list/pair".to_string(), self.to_string()).into(),
+                )
             }
         }
     }
 
-    pub fn expect_symbol(&self) -> Result<String, SchemeError> {
+    pub fn expect_symbol(&self) -> Result<String> {
         match &self.data {
             DatumBody::Symbol(symbol) => Ok(symbol.clone()),
             _ => {
-                return error!(SyntaxError::ExpectSomething(
-                    "symbol".to_string(),
-                    self.to_string()
-                ))
+                return Err(
+                    SyntaxError::ExpectSomething("symbol".to_string(), self.to_string()).into(),
+                )
             }
         }
     }

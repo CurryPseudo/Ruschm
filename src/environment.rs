@@ -1,11 +1,10 @@
+use crate::interpreter::error::LogicError;
 #[cfg(test)]
 use crate::interpreter::Interpreter;
 use crate::values::Value;
-use crate::{error::*, interpreter::error::LogicError};
+use crate::*;
 use cell::{Ref, RefCell, RefMut, RefVal};
 use std::collections::HashMap;
-#[cfg(test)]
-use std::error::Error;
 use std::rc::Rc;
 
 pub type DefinitionIter<'a, V> = Box<dyn 'a + Iterator<Item = (&'a String, &'a V)>>;
@@ -59,13 +58,11 @@ impl<V> LexicalScope<V> {
         }
     }
 
-    pub fn set(&self, name: &str, value: V) -> Result<(), SchemeError> {
+    pub fn set(&self, name: &str, value: V) -> Result<()> {
         match self.definitions.borrow_mut().get_mut(name) {
             None => match &self.parent {
                 None => {
-                    return Err(
-                        ErrorData::Logic(LogicError::UnboundedSymbol(name.to_string())).no_locate(),
-                    );
+                    return Err(LogicError::UnboundedSymbol(name.to_string()).into());
                 }
                 Some(parent) => parent.set(name, value)?,
             },
@@ -91,7 +88,7 @@ impl<V> Default for LexicalScope<V> {
 pub type Environment<R> = LexicalScope<Value<R>>;
 
 #[test]
-fn iter_envs() -> Result<(), Box<dyn std::error::Error>> {
+fn iter_envs() -> Result<()> {
     let it = Interpreter::<f32>::new_with_stdlib();
     {
         it.env.define("a".to_string(), Value::Void);
@@ -110,7 +107,7 @@ fn iter_envs() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 #[test]
-fn get_mut() -> Result<(), Box<dyn Error>> {
+fn get_mut() -> Result<()> {
     use crate::values::Number;
     use std::ops::Deref;
     let env = Environment::<f32>::new();

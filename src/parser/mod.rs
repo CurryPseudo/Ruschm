@@ -1,4 +1,4 @@
-type Result<T> = std::result::Result<T, SchemeError>;
+use crate::Result;
 
 #[macro_use]
 pub mod pair;
@@ -10,7 +10,6 @@ pub use macros::*;
 mod datum;
 pub use datum::*;
 
-use crate::error::SchemeError;
 pub mod error;
 
 use crate::error::ToLocated;
@@ -181,9 +180,8 @@ impl Statement {
         let location = self.location();
         match self {
             Self::Expression(expression) => Ok(expression),
-            _ => located_error!(
-                SyntaxError::ExpectSomething("expression".to_string(), "other".to_string()),
-                location
+            _ => Err(
+                SyntaxError::ExpectSomething("expression".to_string(), "other".to_string()).into(),
             ),
         }
     }
@@ -314,10 +312,7 @@ impl ParameterFormals {
                             ..
                         }) => cdr = Some(last),
                         other => {
-                            return located_error!(
-                                SyntaxError::IllegalParameter(other.get_inside()),
-                                other.get_inside().location
-                            );
+                            return Err(SyntaxError::IllegalParameter(other.get_inside()).into())
                         }
                     }
                 }
@@ -366,7 +361,7 @@ impl ParameterFormals {
                     next = cdr as *mut ParameterFormals;
                 }
                 Either::Right(improper) => {
-                    return error!(LogicError::InproperList(improper.to_string()))
+                    return Err(LogicError::InproperList(improper.to_string()).into());
                 }
                 _empty => {
                     mem::swap(&mut x, unsafe { &mut *next });
@@ -539,7 +534,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
             DatumBody::Pair(mut pair) => {
                 let first = pair.pop_proper()?;
                 match first {
-                    None => return error!(SyntaxError::EmptyCall),
+                    None => return Err(SyntaxError::EmptyCall.into()),
                     Some(first) => {
                         match &first.data {
                             DatumBody::Symbol(keyword) => match keyword.as_str() {
@@ -617,10 +612,11 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
     ) -> Result<Expression> {
         match Self::transform_to_statement(datum, syntax_env)? {
             Statement::Expression(expression) => Ok(expression),
-            _ => error!(SyntaxError::ExpectSomething(
+            _ => Err(SyntaxError::ExpectSomething(
                 "expression".to_string(),
                 "other statement".to_string(),
-            )),
+            )
+            .into()),
         }
     }
 
@@ -641,16 +637,14 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                     }
                     .into(),
                     TokenData::LeftParen => Some(self.current_list_or_pair()?),
-                    TokenData::RightParen => {
-                        return located_error!(SyntaxError::UnmatchedParentheses, location)
-                    }
+                    TokenData::RightParen => return Err(SyntaxError::UnmatchedParentheses.into()),
                     TokenData::VecConsIntro => self.vector()?.into(),
                     TokenData::Quote => {
                         self.advance(1)?;
                         self.parse_quoted()?
                     }
                     .into(),
-                    other => return located_error!(SyntaxError::UnexpectedToken(other), location),
+                    other => return Err(SyntaxError::UnexpectedToken(other).into()),
                 })
             }
         }
@@ -670,10 +664,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
             match data {
                 TokenData::Period => {
                     if encounter_period {
-                        return located_error!(
-                            SyntaxError::UnexpectedToken(TokenData::Period),
-                            *location
-                        );
+                        return Err(SyntaxError::UnexpectedToken(TokenData::Period).into());
                     }
                     encounter_period = true;
                     continue;
@@ -766,14 +757,14 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                         data: DatumBody::Symbol(ident),
                         ..
                     } if ident == "rename" => (),
-                    o => return error!(SyntaxError::UnexpectedDatum(o)),
+                    o => return Err(SyntaxError::UnexpectedDatum(o).into()),
                 };
                 ExportSpec::Rename(
                     Self::transform_identifier(Self::unwrap_non_end(iter.next())?)?,
                     Self::transform_identifier(Self::unwrap_non_end(iter.next())?)?,
                 )
             }
-            _ => return error!(SyntaxError::UnexpectedDatum(datum)),
+            _ => return Err(SyntaxError::UnexpectedDatum(datum).into()),
         }
         .locate(datum.location))
     }
@@ -781,9 +772,8 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
     fn transform_identifier(datum: Datum) -> Result<String> {
         match datum.data {
             DatumBody::Symbol(ident) => Ok(ident),
-            other => located_error!(
-                SyntaxError::ExpectSomething("identifier".to_string(), other.to_string()),
-                datum.location
+            other => Err(
+                SyntaxError::ExpectSomething("identifier".to_string(), other.to_string()).into(),
             ),
         }
     }
@@ -798,10 +788,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
     fn expect_next_nth(&mut self, n: usize, tobe: TokenData) -> Result<()> {
         match self.advance_unwrap(n)? {
             Token { data, .. } if data == &tobe => Ok(()),
-            Token { data, .. } => located_error!(
-                SyntaxError::TokenMisMatch(tobe, Some(data.clone())),
-                self.location
-            ),
+            Token { data, .. } => Err(SyntaxError::TokenMisMatch(tobe, Some(data.clone())).into()),
         }
     }
 
@@ -819,7 +806,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                     self.advance(1)?;
                     Ok(None)
                 }
-                None => located_error!(SyntaxError::UnexpectedEnd, self.location),
+                None => Err(SyntaxError::UnexpectedEnd.into()),
                 _ => {
                     self.advance(1)?;
                     Some(get_element(self)).transpose()
@@ -885,7 +872,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
             }
             TokenData::Identifier(symbol) => DatumBody::Symbol(symbol.clone()).locate(location),
             TokenData::Primitive(p) => DatumBody::Primitive(p.clone()).locate(location),
-            other => return located_error!(SyntaxError::UnexpectedToken(other.clone()), location),
+            other => return Err(SyntaxError::UnexpectedToken(other.clone()).into()),
         })
     }
 
@@ -918,26 +905,21 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                     if expressions.is_empty() {
                         definitions.push(def)
                     } else {
-                        return located_error!(
-                            SyntaxError::InvalidDefinitionContext(def.data),
-                            def.location
-                        );
+                        return Err(SyntaxError::InvalidDefinitionContext(def.data).into());
                     }
                 }
                 Statement::Expression(expr) => expressions.push(expr),
                 _ => {
-                    return located_error!(
-                        SyntaxError::ExpectSomething(
-                            "expression or definition".to_string(),
-                            "other statement".to_string(),
-                        ),
-                        location
+                    return Err(SyntaxError::ExpectSomething(
+                        "expression or definition".to_string(),
+                        "other statement".to_string(),
                     )
+                    .into())
                 }
             }
         }
         if expressions.is_empty() {
-            return error!(SyntaxError::LambdaBodyNoExpression);
+            return Err(SyntaxError::LambdaBodyNoExpression.into());
         }
         Ok((definitions, expressions))
     }
@@ -975,7 +957,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
             DatumBody::Primitive(Primitive::Integer(i)) if i >= 0 => {
                 Ok(LibraryNameElement::Integer(i as u32))
             }
-            o => located_error!(SyntaxError::UnexpectedDatum(o.locate(location)), location),
+            o => Err(SyntaxError::UnexpectedDatum(o.locate(location)).into()),
         }
     }
 
@@ -1052,16 +1034,9 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                             .locate(location);
                     Ok(DefinitionBody(name, procedure))
                 }
-                other => {
-                    return located_error!(
-                        SyntaxError::InvalidDefinition(Datum::from(other)),
-                        location
-                    )
-                }
+                other => return Err(SyntaxError::InvalidDefinition(Datum::from(other)).into()),
             },
-            other => {
-                return located_error!(SyntaxError::DefineNonSymbol(other.no_locate()), location)
-            }
+            other => return Err(SyntaxError::DefineNonSymbol(other.no_locate()).into()),
         }
     }
 
@@ -1087,7 +1062,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                     .map(Self::transform_identifier)
                     .collect::<Result<HashSet<_>>>()?,
             ),
-            _ => return located_error!(SyntaxError::UnexpectedDatum(first), location),
+            _ => return Err(SyntaxError::UnexpectedDatum(first).into()),
         };
 
         let rules = iter
@@ -1130,9 +1105,8 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
         let location = first.location;
         let providing_keyword = first.expect_symbol()?;
         if keyword != providing_keyword {
-            return located_error!(
-                SyntaxError::MacroKeywordMissMatch(keyword.to_string(), providing_keyword),
-                location
+            return Err(
+                SyntaxError::MacroKeywordMissMatch(keyword.to_string(), providing_keyword).into(),
             );
         }
         Ok(
@@ -1174,12 +1148,10 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                         last_template = None;
                     }
                     _ => {
-                        return located_error!(
-                            SyntaxError::UnexpectedDatum(
-                                DatumBody::Symbol(symbol).locate(location)
-                            ),
-                            location
-                        );
+                        return Err(SyntaxError::UnexpectedDatum(
+                            DatumBody::Symbol(symbol).locate(location),
+                        )
+                        .into());
                     }
                 },
                 other => {
@@ -1240,7 +1212,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                 data: DatumBody::Symbol(symbol),
                 ..
             } => symbol,
-            other => return error!(SyntaxError::DefineNonSymbol(other)),
+            other => return Err(SyntaxError::DefineNonSymbol(other).into()),
         };
         let body = Self::transform_to_expression(Self::unwrap_non_end(datums.next())?, syntax_env)?;
         Ok(ExpressionBody::Assignment(symbol, Box::new(body)))
@@ -1275,7 +1247,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
         let token = self.advance(count)?;
         match token {
             Some(tok) => Ok(tok),
-            None => located_error!(SyntaxError::UnexpectedEnd, location),
+            None => Err(SyntaxError::UnexpectedEnd.into()),
         }
     }
 
@@ -1318,7 +1290,7 @@ pub fn simple_procedure(formals: ParameterFormals, expression: Expression) -> Ex
 fn empty() -> Result<()> {
     let tokens = Vec::new();
     let mut parser = token_stream_to_parser(tokens.into_iter());
-    assert_eq!(parser.parse_root(), Ok(None));
+    assert_eq!((parser.parse_root()).unwrap(), (None));
     Ok(())
 }
 
@@ -1465,10 +1437,7 @@ fn unmatched_parantheses() {
         TokenData::Primitive(Primitive::Integer(3)),
     ]);
     let mut parser = token_stream_to_parser(tokens.into_iter());
-    assert_eq!(
-        parser.parse_root(),
-        located_error!(SyntaxError::UnexpectedEnd, None)
-    );
+    assert_eq!(parser.parse_root(), Err(SyntaxError::UnexpectedEnd.into()));
 }
 
 #[test]
@@ -1684,10 +1653,7 @@ fn lambda() -> Result<()> {
         ]);
         let mut parser = token_stream_to_parser(tokens.into_iter());
         let err = parser.parse_root();
-        assert_eq!(
-            err,
-            located_error!(SyntaxError::LambdaBodyNoExpression, None)
-        );
+        assert_eq!(err, Err(SyntaxError::LambdaBodyNoExpression.into()));
     }
 
     {
@@ -2450,8 +2416,8 @@ fn library() {
         let ast = parser.parse_root();
 
         assert_eq!(
-            ast,
-            Ok(Some(Statement::LibraryDefinition(
+            (ast).unwrap(),
+            (Some(Statement::LibraryDefinition(
                 LibraryDefinition(
                     library_name!("lib-a", 0, "base"),
                     vec![

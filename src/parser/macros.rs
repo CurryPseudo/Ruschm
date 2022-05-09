@@ -9,6 +9,8 @@ use crate::error::*;
 use either::Either;
 use itertools::Itertools;
 
+type Result<T> = crate::Result<T, SyntaxError>;
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct UserDefinedTransformer {
     pub ellipsis: Option<String>,
@@ -17,21 +19,18 @@ pub struct UserDefinedTransformer {
 }
 
 impl UserDefinedTransformer {
-    fn transform(&self, keyword: &str, datum: Datum) -> Result<Datum, SchemeError> {
+    fn transform(&self, keyword: &str, datum: Datum) -> Result<Datum> {
         for (pattern, template) in &self.rules {
             let mut substitutions = HashMap::new();
             if pattern.match_datum(&datum, 0, &self.literals, &mut substitutions)? {
                 let mut substituded = template.substitude(&substitutions)?;
                 if substituded.len() != 1 {
-                    return located_error!(
-                        SyntaxError::TransformOutMultipleDatum,
-                        pattern.location
-                    );
+                    return Err(SyntaxError::TransformOutMultipleDatum.into());
                 }
                 return Ok(substituded.pop().unwrap());
             }
         }
-        error!(SyntaxError::MacroMissMatch(keyword.to_string(), datum))
+        Err(SyntaxError::MacroMissMatch(keyword.to_string(), datum).into())
     }
 }
 
@@ -78,7 +77,7 @@ impl SyntaxPattern {
         pattern_literals: &HashSet<String>,
         substitutions: &mut HashMap<String, (Datum, Vec<Datum>)>,
         multi_matches: Option<SyntaxPattern>,
-    ) -> Result<bool, SchemeError> {
+    ) -> Result<bool> {
         Ok(
             match (patterns.get(pattern_index), datums.get(datum_index)) {
                 (None, None) => true,
@@ -144,10 +143,7 @@ impl SyntaxPattern {
                                     );
                                 }
                             } else {
-                                return located_error!(
-                                    SyntaxError::UnexpectedPattern(sub_pattern.clone()),
-                                    sub_pattern.location
-                                );
+                                return Err(SyntaxError::UnexpectedPattern(sub_pattern.clone()));
                             }
                         }
                         SyntaxPatternBody::Identifier(var) if pattern_literals.contains(var) => {
@@ -185,7 +181,7 @@ impl SyntaxPattern {
         depth: usize,
         pattern_literals: &HashSet<String>,
         substitutions: &mut HashMap<String, (Datum, Vec<Datum>)>,
-    ) -> Result<bool, SchemeError> {
+    ) -> Result<bool> {
         // println!(
         //     "{:indent$}matching '{}' with {}",
         //     "",
@@ -307,7 +303,7 @@ impl SyntaxTemplate {
     pub fn substitude(
         &self,
         substitutions: &HashMap<String, (Datum, Vec<Datum>)>,
-    ) -> Result<Vec<Datum>, SchemeError> {
+    ) -> Result<Vec<Datum>> {
         let location = self.location;
         match &self.data {
             SyntaxTemplateBody::Pair(list) => {
@@ -324,8 +320,8 @@ impl SyntaxTemplate {
                             substituted_pair_items.extend(last.substitude(substitutions)?)
                         }
                         _ => {
-                            return error!(SyntaxError::UnexpectedDatum(
-                                DatumBody::Symbol("...".to_string()).locate(self.location)
+                            return Err(SyntaxError::UnexpectedDatum(
+                                DatumBody::Symbol("...".to_string()).locate(self.location),
                             ))
                         }
                     }
@@ -353,9 +349,7 @@ impl SyntaxTemplate {
             SyntaxTemplateBody::Primitive(p) => {
                 Ok(vec![DatumBody::Primitive(p.clone()).locate(location)])
             }
-            SyntaxTemplateBody::Ellipsis => {
-                located_error!(SyntaxError::UnexpectedTemplate(self.clone()), location)
-            }
+            SyntaxTemplateBody::Ellipsis => Err(SyntaxError::UnexpectedTemplate(self.clone())),
         }
     }
 
@@ -363,7 +357,7 @@ impl SyntaxTemplate {
         template: &SyntaxTemplate,
         substitutions: &HashMap<String, (Datum, Vec<Datum>)>,
         item_index: usize,
-    ) -> Result<Option<Datum>, SchemeError> {
+    ) -> Result<Option<Datum>> {
         Ok(match &template.data {
             SyntaxTemplateBody::Pair(list) => {
                 let mut new_list_elements = Vec::new();
@@ -410,10 +404,7 @@ impl SyntaxTemplate {
                 Some(DatumBody::Primitive(p.clone()).locate(template.location))
             }
             SyntaxTemplateBody::Ellipsis => {
-                return located_error!(
-                    SyntaxError::UnexpectedTemplate(template.clone()),
-                    template.location
-                );
+                return Err(SyntaxError::UnexpectedTemplate(template.clone()).into())
             }
         })
     }
@@ -421,7 +412,7 @@ impl SyntaxTemplate {
     fn substitute_template_element(
         template_element: &SyntaxTemplateElement,
         substitutions: &HashMap<String, (Datum, Vec<Datum>)>,
-    ) -> Result<Vec<Datum>, SchemeError> {
+    ) -> Result<Vec<Datum>> {
         match template_element {
             SyntaxTemplateElement(sub_template, true) => {
                 let mut result = sub_template.substitude(substitutions)?;
@@ -489,7 +480,7 @@ impl From<GenericPair<SyntaxTemplateElement>> for SyntaxTemplateElement {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Transformer {
-    Native(fn(Datum) -> Result<Datum, SchemeError>),
+    Native(fn(Datum) -> Result<Datum>),
     Scheme(UserDefinedTransformer),
 }
 
@@ -503,7 +494,7 @@ impl Display for Transformer {
 }
 
 impl Transformer {
-    pub fn transform(&self, keyword: &str, datum: Datum) -> Result<Datum, SchemeError> {
+    pub fn transform(&self, keyword: &str, datum: Datum) -> Result<Datum> {
         match self {
             Transformer::Native(f) => f(datum),
             Transformer::Scheme(user) => user.transform(keyword, datum),

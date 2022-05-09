@@ -1,7 +1,8 @@
 use crate::{
-    error::{ErrorData, Located, SchemeError, ToLocated},
+    error::Located,
     interpreter::error::LogicError,
     parser::{Lexer, LibraryDefinition, LibraryName, Parser, Statement},
+    Result,
 };
 
 pub enum GenericLibraryFactory<'a, V> {
@@ -19,7 +20,7 @@ impl<'a, V> GenericLibraryFactory<'a, V> {
     pub fn from_char_stream(
         expect_library_name: &LibraryName,
         char_stream: impl Iterator<Item = char>,
-    ) -> Result<Self, SchemeError> {
+    ) -> Result<Self> {
         let lexer = Lexer::from_char_stream(char_stream);
         let parser = Parser::from_lexer(lexer);
         for statement in parser {
@@ -29,6 +30,6 @@ impl<'a, V> GenericLibraryFactory<'a, V> {
                 }
             }
         }
-        error!(LogicError::LibraryNotFound(expect_library_name.clone()))
+        Err(LogicError::LibraryNotFound(expect_library_name.clone()).into())
     }
 }

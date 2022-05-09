@@ -11,7 +11,7 @@ use ruschm::{
 };
 
 #[test]
-fn list() -> Result<(), SchemeError> {
+fn list() -> Result<()> {
     let mut interpreter = Interpreter::<f32>::new_with_stdlib();
     assert_eq!(
         interpreter.eval("(list 1 2 3)".chars())?,
@@ -62,7 +62,7 @@ fn list() -> Result<(), SchemeError> {
 }
 
 #[test]
-fn vector() -> Result<(), SchemeError> {
+fn vector() -> Result<()> {
     use ruschm::values::ValueReference;
     let mut interpreter = Interpreter::<f32>::new_with_stdlib();
     assert_eq!(
@@ -81,7 +81,7 @@ fn vector() -> Result<(), SchemeError> {
 }
 
 #[test]
-fn apply() -> Result<(), SchemeError> {
+fn apply() -> Result<()> {
     let mut interpreter = Interpreter::<f32>::new_with_stdlib();
     assert_eq!(
         interpreter.eval("(apply + 1 2 '(3 4))".chars())?,
@@ -95,7 +95,7 @@ fn apply() -> Result<(), SchemeError> {
 }
 
 #[test]
-fn booleans() -> Result<(), SchemeError> {
+fn booleans() -> Result<()> {
     {
         let mut interpreter = Interpreter::<f32>::new_with_stdlib();
         assert_eq!(

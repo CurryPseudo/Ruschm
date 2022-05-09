@@ -1,10 +1,11 @@
+use crate::*;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
 };
 
-pub fn file_char_stream(path: &Path) -> Result<impl Iterator<Item = char>, std::io::Error> {
+pub fn file_char_stream(path: &Path) -> Result<impl Iterator<Item = char>> {
     let f = BufReader::new(File::open(path)?);
     Ok(f.lines().flat_map(|line| {
         line.unwrap()

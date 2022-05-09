@@ -1,11 +1,8 @@
+use std::fmt;
+use std::{fmt::Debug, ops::Deref, ops::DerefMut};
 use thiserror::Error;
 
-use std::fmt;
-use std::{error::Error, fmt::Debug, ops::Deref, ops::DerefMut};
-
 use fmt::Display;
-
-use crate::{interpreter::error::LogicError, parser::error::SyntaxError};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Located<T> {
@@ -73,50 +70,12 @@ impl<T> DerefMut for Located<T> {
         &mut self.data
     }
 }
-#[derive(PartialEq, Error, Clone)]
-pub enum ErrorData {
-    #[error("syntax error: {0}")]
-    Syntax(#[from] SyntaxError),
-    #[error(transparent)]
-    Logic(#[from] LogicError),
-    #[error("io error: {0}")]
-    IO(String), // std::io::Error does not implement PartialEq and Clone, so use display message directly
-}
 
-pub type SchemeError = Located<ErrorData>;
-impl From<std::io::Error> for SchemeError {
-    fn from(io_error: std::io::Error) -> Self {
-        ErrorData::IO(format!("{}", io_error)).no_locate()
-    }
-}
-
-impl ToLocated for ErrorData {}
-
-impl Debug for ErrorData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self, f)
-    }
-}
-
-impl Error for SchemeError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.data)
-    }
-}
+#[derive(Error, Debug, PartialEq)]
+#[error("Error at location {}:{}", .0[0], .0[1])]
+pub struct SchemeErrorLocation(pub [u32; 2]);
 
 #[cfg(test)]
 pub(crate) fn convert_located<T>(datas: Vec<T>) -> Vec<Located<T>> {
     datas.into_iter().map(Located::from).collect()
-}
-
-macro_rules! error {
-    ($arg:expr) => {
-        Err(ErrorData::from($arg).no_locate())
-    };
-}
-
-macro_rules! located_error {
-    ($arg:expr, $loc:expr) => {
-        Err(ErrorData::from($arg).locate($loc))
-    };
 }

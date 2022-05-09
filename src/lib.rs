@@ -10,3 +10,4 @@ pub mod io;
 pub mod library_factory;
 pub mod repl;
 pub mod values;
+pub use anyhow::Result;

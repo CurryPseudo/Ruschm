@@ -2,7 +2,6 @@ use crate::parser::pair::GenericPair;
 use crate::parser::*;
 use crate::values::*;
 use crate::{environment::*, interpreter::*};
-use crate::{error::ErrorData, error::ToLocated};
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -17,7 +16,7 @@ impl<R: RealNumberInternalTrait> ImpureBuiltinProcedure<R> for Apply {
 
             let extended = match extended {
                 Value::Pair(p) => p.into_iter().collect::<ArgVec<R>>(),
-                other => return error!(LogicError::TypeMisMatch(other.to_string(), Type::Pair)),
+                other => return Err(LogicError::TypeMisMatch(other.to_string(), Type::Pair).into()),
             };
             args.extend(extended);
         }
@@ -30,7 +29,7 @@ fn car<R: RealNumberInternalTrait>(
     let mut iter = arguments.into_iter();
     match iter.next().unwrap().expect_list()? {
         Pair::Some(car, _) => Ok(car),
-        empty => return error!(LogicError::TypeMisMatch(empty.to_string(), Type::Pair)),
+        empty => return Err(LogicError::TypeMisMatch(empty.to_string(), Type::Pair).into()),
     }
 }
 
@@ -40,7 +39,7 @@ fn cdr<R: RealNumberInternalTrait>(
     let mut iter = arguments.into_iter();
     match iter.next().unwrap().expect_list()? {
         Pair::Some(_, cdr) => Ok(cdr),
-        empty => return error!(LogicError::TypeMisMatch(empty.to_string(), Type::Pair)),
+        empty => return Err(LogicError::TypeMisMatch(empty.to_string(), Type::Pair).into()),
     }
 }
 
@@ -99,7 +98,7 @@ fn equivalance_predicate() {
             Value::Number(Number::Integer(1)),
             Value::Number(Number::Integer(1)),
         ];
-        assert_eq!(eqv(arguments), Ok(Value::Boolean(true)));
+        assert_eq!((eqv(arguments)).unwrap(), (Value::Boolean(true)));
     }
 
     {
@@ -113,7 +112,7 @@ fn equivalance_predicate() {
                 Value::Character('b'),
             ))),
         ];
-        assert_eq!(eqv(arguments), Ok(Value::Boolean(false)));
+        assert_eq!((eqv(arguments)).unwrap(), (Value::Boolean(false)));
     }
 
     {
@@ -121,25 +120,25 @@ fn equivalance_predicate() {
             Value::Vector(ValueReference::new_immutable(vec![Value::Character('a')])),
             Value::Vector(ValueReference::new_immutable(vec![Value::Character('a')])),
         ];
-        assert_eq!(eqv(arguments), Ok(Value::Boolean(false)));
+        assert_eq!((eqv(arguments)).unwrap(), (Value::Boolean(false)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(1)),
             Value::Number(Number::Integer(1)),
         ];
-        assert_eq!(eqv(arguments), Ok(Value::Boolean(true)));
+        assert_eq!((eqv(arguments)).unwrap(), (Value::Boolean(true)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(1)),
             Value::Number(Number::Rational(1, 1)),
         ];
-        assert_eq!(eqv(arguments), Ok(Value::Boolean(false)));
+        assert_eq!((eqv(arguments)).unwrap(), (Value::Boolean(false)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![Value::from(Pair::Empty), Value::from(Pair::Empty)];
-        assert_eq!(eqv(arguments), Ok(Value::Boolean(true)));
+        assert_eq!((eqv(arguments)).unwrap(), (Value::Boolean(true)));
     }
 }
 
@@ -165,18 +164,27 @@ fn add<R: RealNumberInternalTrait>(
 fn builtin_add() {
     {
         let arguments: Vec<Value<f32>> = vec![];
-        assert_eq!(add(arguments), Ok(Value::Number(Number::Integer(0))));
+        assert_eq!(
+            (add(arguments)).unwrap(),
+            (Value::Number(Number::Integer(0)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![Value::Number(Number::Integer(2))];
-        assert_eq!(add(arguments), Ok(Value::Number(Number::Integer(2))));
+        assert_eq!(
+            (add(arguments)).unwrap(),
+            (Value::Number(Number::Integer(2)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(3)),
         ];
-        assert_eq!(add(arguments), Ok(Value::Number(Number::Integer(5))));
+        assert_eq!(
+            (add(arguments)).unwrap(),
+            (Value::Number(Number::Integer(5)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -184,7 +192,10 @@ fn builtin_add() {
             Value::Number(Number::Integer(3)),
             Value::Number(Number::Integer(4)),
         ];
-        assert_eq!(add(arguments), Ok(Value::Number(Number::Integer(9))));
+        assert_eq!(
+            (add(arguments)).unwrap(),
+            (Value::Number(Number::Integer(9)))
+        );
     }
 }
 
@@ -205,14 +216,20 @@ fn sub<R: RealNumberInternalTrait>(
 fn builtin_sub() {
     {
         let arguments: Vec<Value<f32>> = vec![Value::Number(Number::Integer(2))];
-        assert_eq!(sub(arguments), Ok(Value::Number(Number::Integer(-2))));
+        assert_eq!(
+            (sub(arguments)).unwrap(),
+            (Value::Number(Number::Integer(-2)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(3)),
         ];
-        assert_eq!(sub(arguments), Ok(Value::Number(Number::Integer(-1))));
+        assert_eq!(
+            (sub(arguments)).unwrap(),
+            (Value::Number(Number::Integer(-1)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -220,7 +237,10 @@ fn builtin_sub() {
             Value::Number(Number::Integer(3)),
             Value::Number(Number::Integer(4)),
         ];
-        assert_eq!(sub(arguments), Ok(Value::Number(Number::Integer(-5))));
+        assert_eq!(
+            (sub(arguments)).unwrap(),
+            (Value::Number(Number::Integer(-5)))
+        );
     }
 }
 
@@ -237,18 +257,27 @@ fn mul<R: RealNumberInternalTrait>(
 fn builtin_mul() {
     {
         let arguments: Vec<Value<f32>> = vec![];
-        assert_eq!(mul(arguments), Ok(Value::Number(Number::Integer(1))));
+        assert_eq!(
+            (mul(arguments)).unwrap(),
+            (Value::Number(Number::Integer(1)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![Value::Number(Number::Integer(2))];
-        assert_eq!(mul(arguments), Ok(Value::Number(Number::Integer(2))));
+        assert_eq!(
+            (mul(arguments)).unwrap(),
+            (Value::Number(Number::Integer(2)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(3)),
         ];
-        assert_eq!(mul(arguments), Ok(Value::Number(Number::Integer(6))));
+        assert_eq!(
+            (mul(arguments)).unwrap(),
+            (Value::Number(Number::Integer(6)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -256,7 +285,10 @@ fn builtin_mul() {
             Value::Number(Number::Integer(3)),
             Value::Number(Number::Integer(4)),
         ];
-        assert_eq!(mul(arguments), Ok(Value::Number(Number::Integer(24))));
+        assert_eq!(
+            (mul(arguments)).unwrap(),
+            (Value::Number(Number::Integer(24)))
+        );
     }
 }
 
@@ -277,14 +309,20 @@ fn div<R: RealNumberInternalTrait>(
 fn builtin_div() {
     {
         let arguments: Vec<Value<f32>> = vec![Value::Number(Number::Integer(2))];
-        assert_eq!(div(arguments), Ok(Value::Number(Number::Real(0.5))));
+        assert_eq!(
+            (div(arguments)).unwrap(),
+            (Value::Number(Number::Real(0.5)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(8)),
         ];
-        assert_eq!(div(arguments), Ok(Value::Number(Number::Real(0.25))));
+        assert_eq!(
+            (div(arguments)).unwrap(),
+            (Value::Number(Number::Real(0.25)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -292,7 +330,10 @@ fn builtin_div() {
             Value::Number(Number::Integer(8)),
             Value::Number(Number::Real(0.125)),
         ];
-        assert_eq!(div(arguments), Ok(Value::<f32>::Number(Number::Real(2.))));
+        assert_eq!(
+            (div(arguments)).unwrap(),
+            (Value::<f32>::Number(Number::Real(2.)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -300,8 +341,11 @@ fn builtin_div() {
             Value::Number(Number::Integer(0)),
         ];
         assert_eq!(
-            div(arguments),
-            Err(ErrorData::Logic(LogicError::DivisionByZero).no_locate())
+            div(arguments)
+                .unwrap_err()
+                .downcast::<LogicError>()
+                .unwrap(),
+            LogicError::DivisionByZero
         );
     }
 }
@@ -334,7 +378,10 @@ numeric_one_argument!(exact, ?);
 fn builtin_numeric_one() {
     {
         let arguments: Vec<Value<f32>> = vec![Value::Number(Number::Rational(-49, 3))];
-        assert_eq!(floor(arguments), Ok(Value::Number(Number::Integer(-17))));
+        assert_eq!(
+            (floor(arguments)).unwrap(),
+            (Value::Number(Number::Integer(-17)))
+        );
     }
 }
 
@@ -364,8 +411,8 @@ fn builtin_numeric_two() {
             Value::Number(Number::Integer(3)),
         ];
         assert_eq!(
-            floor_remainder(arguments),
-            Ok(Value::Number(Number::Integer(2)))
+            (floor_remainder(arguments)).unwrap(),
+            (Value::Number(Number::Integer(2)))
         );
     }
 }
@@ -382,7 +429,7 @@ fn make_vector<R: RealNumberInternalTrait>(
     let mut iter = arguments.into_iter();
     let k = iter.next().unwrap().expect_integer()?;
     if k < 0 {
-        return error!(LogicError::NegativeLength);
+        return Err(LogicError::NegativeLength.into());
     }
     let fill = iter.next().unwrap();
     Ok(Value::Vector(ValueReference::new_mutable(vec![
@@ -397,8 +444,8 @@ fn builtin_make_vector() {
         let arguments: Vec<Value<f32>> =
             vec![Value::Number(Number::Integer(3)), Value::Boolean(true)];
         assert_eq!(
-            make_vector(arguments),
-            Ok(Value::Vector(ValueReference::new_mutable(vec![
+            (make_vector(arguments)).unwrap(),
+            (Value::Vector(ValueReference::new_mutable(vec![
                 Value::Boolean(true),
                 Value::Boolean(true),
                 Value::Boolean(true)
@@ -409,14 +456,20 @@ fn builtin_make_vector() {
         let arguments: Vec<Value<f32>> =
             vec![Value::Number(Number::Integer(0)), Value::Boolean(true)];
         assert_eq!(
-            make_vector(arguments),
-            Ok(Value::Vector(ValueReference::new_mutable(vec![])))
+            (make_vector(arguments)).unwrap(),
+            (Value::Vector(ValueReference::new_mutable(vec![])))
         );
     }
     {
         let arguments: Vec<Value<f32>> =
             vec![Value::Number(Number::Integer(-1)), Value::Boolean(true)];
-        assert_eq!(make_vector(arguments), error!(LogicError::NegativeLength));
+        assert_eq!(
+            (make_vector(arguments))
+                .unwrap_err()
+                .downcast::<LogicError>()
+                .unwrap(),
+            (LogicError::NegativeLength)
+        );
     }
 }
 
@@ -438,16 +491,16 @@ fn builtin_vector_length() {
         ]));
         let arguments = vec![vector];
         assert_eq!(
-            vector_length(arguments),
-            Ok(Value::Number(Number::Integer(3)))
+            (vector_length(arguments)).unwrap(),
+            (Value::Number(Number::Integer(3)))
         );
     }
     {
         let vector: Value<f32> = Value::Vector(ValueReference::new_immutable(vec![]));
         let arguments = vec![vector];
         assert_eq!(
-            vector_length(arguments),
-            Ok(Value::Number(Number::Integer(0)))
+            (vector_length(arguments)).unwrap(),
+            (Value::Number(Number::Integer(0)))
         );
     }
 }
@@ -460,7 +513,7 @@ fn vector_ref<R: RealNumberInternalTrait>(
     let k = iter.next().unwrap().expect_integer()?;
     let r = match vector.as_ref().get(k as usize) {
         Some(value) => Ok(value.clone()),
-        None => return error!(LogicError::VectorIndexOutOfBounds),
+        None => return Err(LogicError::VectorIndexOutOfBounds.into()),
     };
     r
 }
@@ -474,24 +527,33 @@ fn builtin_vector_ref() {
     ]));
     {
         let arguments = vec![vector.clone(), Value::Number(Number::Integer(0))];
-        assert_eq!(vector_ref(arguments), Ok(Value::Number(Number::Integer(5))));
+        assert_eq!(
+            (vector_ref(arguments)).unwrap(),
+            (Value::Number(Number::Integer(5)))
+        );
     }
     {
         let arguments = vec![vector.clone(), Value::Number(Number::Integer(1))];
-        assert_eq!(vector_ref(arguments), Ok(Value::String("foo".to_string())));
+        assert_eq!(
+            (vector_ref(arguments)).unwrap(),
+            (Value::String("foo".to_string()))
+        );
     }
     {
         let arguments = vec![vector.clone(), Value::Number(Number::Integer(2))];
         assert_eq!(
-            vector_ref(arguments),
-            Ok(Value::Number(Number::Rational(5, 3)))
+            (vector_ref(arguments)).unwrap(),
+            (Value::Number(Number::Rational(5, 3)))
         );
     }
     {
         let arguments = vec![vector, Value::Number(Number::Integer(3))];
         assert_eq!(
-            vector_ref(arguments),
-            Err(ErrorData::Logic(LogicError::VectorIndexOutOfBounds).no_locate())
+            vector_ref(arguments)
+                .unwrap_err()
+                .downcast::<LogicError>()
+                .unwrap(),
+            LogicError::VectorIndexOutOfBounds
         );
     }
 }
@@ -504,7 +566,7 @@ fn vector_set<R: RealNumberInternalTrait>(
     let k = iter.next().unwrap().expect_integer()?;
     let obj = iter.next().unwrap();
     match vector.as_mut()?.get_mut(k as usize) {
-        None => return Err(ErrorData::Logic(LogicError::VectorIndexOutOfBounds).no_locate()),
+        None => return Err(LogicError::VectorIndexOutOfBounds.into()),
         Some(value) => {
             *value = obj;
         }
@@ -526,7 +588,7 @@ fn builtin_vector_set() -> Result<()> {
             Value::Number(Number::Integer(0)),
             Value::Number(Number::Real(3.14)),
         ];
-        assert_eq!(vector_set(arguments), Ok(Value::Void));
+        assert_eq!((vector_set(arguments)).unwrap(), (Value::Void));
         assert_eq!(
             vector,
             Value::Vector(ValueReference::new_mutable(vec![
@@ -542,7 +604,7 @@ fn builtin_vector_set() -> Result<()> {
             Value::Number(Number::Integer(1)),
             Value::Number(Number::Integer(5)),
         ];
-        assert_eq!(vector_set(arguments), Ok(Value::Void));
+        assert_eq!((vector_set(arguments)).unwrap(), (Value::Void));
         assert_eq!(
             vector,
             Value::Vector(ValueReference::new_mutable(vec![
@@ -558,7 +620,7 @@ fn builtin_vector_set() -> Result<()> {
             Value::Number(Number::Integer(2)),
             Value::String("bar".to_string()),
         ];
-        assert_eq!(vector_set(arguments), Ok(Value::Void));
+        assert_eq!((vector_set(arguments)).unwrap(), (Value::Void));
         assert_eq!(
             vector,
             Value::Vector(ValueReference::new_mutable(vec![
@@ -575,8 +637,11 @@ fn builtin_vector_set() -> Result<()> {
             Value::Number(Number::Integer(5)),
         ];
         assert_eq!(
-            vector_set(arguments),
-            error!(LogicError::VectorIndexOutOfBounds)
+            (vector_set(arguments))
+                .unwrap_err()
+                .downcast::<LogicError>()
+                .unwrap(),
+            LogicError::VectorIndexOutOfBounds
         );
     }
     Ok(())
@@ -627,25 +692,25 @@ typed_comparision!(boolean_equal, Ordering::Equal, expect_boolean);
 fn builtin_greater() {
     {
         let arguments: Vec<Value<f32>> = vec![];
-        assert_eq!(greater(arguments), Ok(Value::Boolean(true)));
+        assert_eq!((greater(arguments)).unwrap(), (Value::Boolean(true)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![Value::Number(Number::Integer(2))];
-        assert_eq!(greater(arguments), Ok(Value::Boolean(true)));
+        assert_eq!((greater(arguments)).unwrap(), (Value::Boolean(true)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(4)),
             Value::Number(Number::Integer(2)),
         ];
-        assert_eq!(greater(arguments), Ok(Value::Boolean(true)));
+        assert_eq!((greater(arguments)).unwrap(), (Value::Boolean(true)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(4)),
             Value::Number(Number::Integer(8)),
         ];
-        assert_eq!(greater(arguments), Ok(Value::Boolean(false)));
+        assert_eq!((greater(arguments)).unwrap(), (Value::Boolean(false)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -653,7 +718,7 @@ fn builtin_greater() {
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(1)),
         ];
-        assert_eq!(greater(arguments), Ok(Value::Boolean(true)));
+        assert_eq!((greater(arguments)).unwrap(), (Value::Boolean(true)));
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -661,7 +726,7 @@ fn builtin_greater() {
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(2)),
         ];
-        assert_eq!(greater(arguments), Ok(Value::Boolean(false)));
+        assert_eq!((greater(arguments)).unwrap(), (Value::Boolean(false)));
     }
 }
 
@@ -689,21 +754,30 @@ first_of_order!(min, <);
 fn builtin_min() {
     {
         let arguments: Vec<Value<f32>> = vec![Value::Number(Number::Integer(2))];
-        assert_eq!(min(arguments), Ok(Value::Number(Number::Integer(2))));
+        assert_eq!(
+            (min(arguments)).unwrap(),
+            (Value::Number(Number::Integer(2)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(4)),
             Value::Number(Number::Integer(2)),
         ];
-        assert_eq!(min(arguments), Ok(Value::Number(Number::Integer(2))));
+        assert_eq!(
+            (min(arguments)).unwrap(),
+            (Value::Number(Number::Integer(2)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
             Value::Number(Number::Integer(4)),
             Value::Number(Number::Integer(8)),
         ];
-        assert_eq!(min(arguments), Ok(Value::Number(Number::Integer(4))));
+        assert_eq!(
+            (min(arguments)).unwrap(),
+            (Value::Number(Number::Integer(4)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -711,7 +785,10 @@ fn builtin_min() {
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(1)),
         ];
-        assert_eq!(min(arguments), Ok(Value::Number(Number::Integer(1))));
+        assert_eq!(
+            (min(arguments)).unwrap(),
+            (Value::Number(Number::Integer(1)))
+        );
     }
     {
         let arguments: Vec<Value<f32>> = vec![
@@ -719,7 +796,7 @@ fn builtin_min() {
             Value::Number(Number::Integer(2)),
             Value::Number(Number::Integer(2)),
         ];
-        assert_eq!(greater(arguments), Ok(Value::Boolean(false)));
+        assert_eq!((greater(arguments)).unwrap(), (Value::Boolean(false)));
     }
 }
 

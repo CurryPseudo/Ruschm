@@ -95,12 +95,7 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                         'f' => Ok(Some(TokenData::Primitive(Primitive::Boolean(false)))),
                         '\\' => match self.advance(1).take() {
                             Some(cnn) => Ok(Some(TokenData::Primitive(Primitive::Character(cnn)))),
-                            None => {
-                                return located_error!(
-                                    SyntaxError::UnexpectedEnd,
-                                    Some(self.location)
-                                )
-                            }
+                            None => return Err(SyntaxError::UnexpectedEnd.into()),
                         },
                         'u' => {
                             if Some('8') == self.advance(1).take()
@@ -108,20 +103,12 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                             {
                                 Ok(Some(TokenData::ByteVecConsIntro))
                             } else {
-                                return located_error!(
-                                    SyntaxError::UnrecognizedToken,
-                                    Some(self.location)
-                                );
+                                return Err(SyntaxError::UnrecognizedToken.into());
                             }
                         }
-                        _ => {
-                            return located_error!(
-                                SyntaxError::UnrecognizedToken,
-                                Some(self.location)
-                            )
-                        }
+                        _ => return Err(SyntaxError::UnrecognizedToken.into()),
                     },
-                    None => return located_error!(SyntaxError::UnexpectedEnd, Some(self.location)),
+                    None => return Err(SyntaxError::UnexpectedEnd.into()),
                 },
                 '\'' => Ok(Some(TokenData::Quote)),
                 '`' => Ok(Some(TokenData::Quasiquote)),
@@ -178,10 +165,11 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
         match c {
             ' ' | '\t' | '\n' | '\r' | '(' | ')' | '"' | ';' | '|' => Ok(()),
             other => {
-                return located_error!(
-                    SyntaxError::ExpectSomething("delimiter".to_string(), other.to_string()),
-                    location
+                return Err(SyntaxError::ExpectSomething(
+                    "delimiter".to_string(),
+                    other.to_string(),
                 )
+                .into())
             }
         }
     }
@@ -254,9 +242,8 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                             }
                         },
                         None => {
-                            return located_error!(
-                                SyntaxError::InvalidIdentifier(identifier_str.clone()),
-                                Some(self.location)
+                            return Err(
+                                SyntaxError::InvalidIdentifier(identifier_str.clone()).into()
                             );
                         }
                     }
@@ -304,10 +291,7 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
         loop {
             match self.advance(1) {
                 None => {
-                    return located_error!(
-                        SyntaxError::ImcompleteQuotedIdent(identifier_str),
-                        Some(self.location)
-                    );
+                    return Err(SyntaxError::ImcompleteQuotedIdent(identifier_str).into());
                 }
                 Some('|') => break Ok(Some(TokenData::Identifier(identifier_str))),
                 Some(nc) => identifier_str.push(*nc),
@@ -342,25 +326,19 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                                             'x' => (), // TODO: 'x' for hex value
                                             ' ' => (), // TODO: space for nothing
                                             other => {
-                                                return located_error!(
-                                                    SyntaxError::UnknownEscape(*other),
-                                                    Some(self.location)
+                                                return Err(
+                                                    SyntaxError::UnknownEscape(*other).into()
                                                 )
                                             }
                                         }
                                     }
-                                    None => {
-                                        return located_error!(
-                                            SyntaxError::UnexpectedEnd,
-                                            Some(self.location)
-                                        )
-                                    }
+                                    None => return Err(SyntaxError::UnexpectedEnd.into()),
                                 }
                             }
                             _ => string_literal.push(c),
                         }
                     } else {
-                        return located_error!(SyntaxError::UnexpectedEnd, Some(self.location));
+                        return Err(SyntaxError::UnexpectedEnd.into());
                     }
                 }
             }
@@ -447,12 +425,7 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                                 break Ok(Some(TokenData::Primitive(Primitive::Rational(
                                     number_literal.parse::<i32>().unwrap(),
                                     match denominator.parse::<u32>().unwrap() {
-                                        0 => {
-                                            return located_error!(
-                                                SyntaxError::RationalDivideByZero,
-                                                Some(self.location)
-                                            )
-                                        }
+                                        0 => return Err(SyntaxError::RationalDivideByZero.into()),
                                         other => other,
                                     },
                                 ))));
@@ -601,12 +574,18 @@ fn number() -> Result<()> {
         ]
     );
     assert_eq!(
-        tokenize("1/0"),
-        located_error!(SyntaxError::RationalDivideByZero, None)
+        tokenize("1/0")
+            .unwrap_err()
+            .downcast::<SyntaxError>()
+            .unwrap(),
+        SyntaxError::RationalDivideByZero
     );
     assert_eq!(
-        tokenize("1/00"),
-        located_error!(SyntaxError::RationalDivideByZero, None)
+        tokenize("1/00")
+            .unwrap_err()
+            .downcast::<SyntaxError>()
+            .unwrap(),
+        SyntaxError::RationalDivideByZero
     );
     Ok(())
 }
