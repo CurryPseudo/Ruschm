@@ -30,7 +30,7 @@ fn car<R: RealNumberInternalTrait>(
     let mut iter = arguments.into_iter();
     match iter.next().unwrap().expect_list()? {
         Pair::Some(car, _) => Ok(car),
-        empty => return error!(LogicError::TypeMisMatch(empty.to_string(), Type::Pair)),
+        empty => error!(LogicError::TypeMisMatch(empty.to_string(), Type::Pair)),
     }
 }
 
@@ -40,7 +40,7 @@ fn cdr<R: RealNumberInternalTrait>(
     let mut iter = arguments.into_iter();
     match iter.next().unwrap().expect_list()? {
         Pair::Some(_, cdr) => Ok(cdr),
-        empty => return error!(LogicError::TypeMisMatch(empty.to_string(), Type::Pair)),
+        empty => error!(LogicError::TypeMisMatch(empty.to_string(), Type::Pair)),
     }
 }
 

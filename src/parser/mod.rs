@@ -147,7 +147,7 @@ impl LibraryName {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ExportSpec {
     Direct(String),
     Rename(String, String),
@@ -1053,14 +1053,14 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                     Ok(DefinitionBody(name, procedure))
                 }
                 other => {
-                    return located_error!(
+                    located_error!(
                         SyntaxError::InvalidDefinition(Datum::from(other)),
                         location
                     )
                 }
             },
             other => {
-                return located_error!(SyntaxError::DefineNonSymbol(other.no_locate()), location)
+                located_error!(SyntaxError::DefineNonSymbol(other.no_locate()), location)
             }
         }
     }

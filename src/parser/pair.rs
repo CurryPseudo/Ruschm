@@ -7,7 +7,7 @@ use std::{fmt::Display, iter::FromIterator, mem};
 // Some(T, T <another pair> )) for proper list
 // Empty for empty list
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GenericPair<T> {
     Some(T, T),
     Empty,

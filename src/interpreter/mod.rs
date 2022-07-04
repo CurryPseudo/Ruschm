@@ -1277,7 +1277,7 @@ fn eval_tail_expression() -> Result<()> {
             TailExpressionResult::TailCall(TailCall::Ref(
                 &Expression::from(ExpressionBody::Symbol("+".to_string())),
                 &expect_result,
-                interpreter.env.clone()
+                interpreter.env
             ))
         );
     }

@@ -562,7 +562,7 @@ impl<R: RealNumberInternalTrait> Display for Procedure<R> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueReference<T> {
     Immutable(Rc<T>),
     Mutable(Rc<RefCell<T>>),
@@ -649,7 +649,7 @@ fn macro_match_expect_type() {
 }
 
 // TODO: using enum as type when RFC 1450 is stable
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Type {
     Number, // Non exhaustive, but ok
     Integer,

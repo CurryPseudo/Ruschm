@@ -8,7 +8,7 @@ use super::{error::SyntaxError, Primitive, Result};
 
 pub type Token = Located<TokenData>;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenData {
     Identifier(String),
     Primitive(Primitive),
@@ -96,7 +96,7 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                         '\\' => match self.advance(1).take() {
                             Some(cnn) => Ok(Some(TokenData::Primitive(Primitive::Character(cnn)))),
                             None => {
-                                return located_error!(
+                                located_error!(
                                     SyntaxError::UnexpectedEnd,
                                     Some(self.location)
                                 )
@@ -108,20 +108,20 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                             {
                                 Ok(Some(TokenData::ByteVecConsIntro))
                             } else {
-                                return located_error!(
+                                located_error!(
                                     SyntaxError::UnrecognizedToken,
                                     Some(self.location)
-                                );
+                                )
                             }
                         }
                         _ => {
-                            return located_error!(
+                            located_error!(
                                 SyntaxError::UnrecognizedToken,
                                 Some(self.location)
                             )
                         }
                     },
-                    None => return located_error!(SyntaxError::UnexpectedEnd, Some(self.location)),
+                    None => located_error!(SyntaxError::UnexpectedEnd, Some(self.location)),
                 },
                 '\'' => Ok(Some(TokenData::Quote)),
                 '`' => Ok(Some(TokenData::Quasiquote)),
@@ -178,7 +178,7 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
         match c {
             ' ' | '\t' | '\n' | '\r' | '(' | ')' | '"' | ';' | '|' => Ok(()),
             other => {
-                return located_error!(
+                located_error!(
                     SyntaxError::ExpectSomething("delimiter".to_string(), other.to_string()),
                     location
                 )
