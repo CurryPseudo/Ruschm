@@ -3,6 +3,9 @@ pub mod library;
 type Result<T> = std::result::Result<T, SchemeError>;
 
 use error::LogicError;
+use num_bigint::TryFromBigIntError;
+#[cfg(test)]
+use num_bigint::{BigInt, BigUint};
 
 use crate::error::SchemeError;
 pub mod error;
@@ -21,6 +24,7 @@ use crate::{
 #[cfg(test)]
 use crate::parser::pair::*;
 
+use std::convert::TryFrom;
 use std::{collections::HashMap, ops::Deref, path::Path, rc::Rc};
 use std::{collections::HashSet, iter::Iterator};
 use std::{marker::PhantomData, path::PathBuf};
@@ -373,12 +377,32 @@ impl<'a, R: RealNumberInternalTrait> Interpreter<'a, R> {
             Primitive::Character(c) => Value::Character(*c),
             Primitive::String(string) => Value::String(string.clone()),
             Primitive::Boolean(value) => Value::Boolean(*value),
-            Primitive::Integer(value) => Value::Number(Number::Integer(*value)),
+            Primitive::Integer(value) => Value::Number(Number::Integer(
+                i32::try_from(value).map_err(|_: TryFromBigIntError<()>| {
+                    ErrorData::Anyhow(anyhow::anyhow!(
+                        "integer {} out of range when converted to i32",
+                        value
+                    ))
+                })?,
+            )),
             Primitive::Real(number_literal) => Value::Number(Number::Real(
                 R::from(number_literal.parse::<f64>().unwrap()).unwrap(),
             )),
             // TODO: apply gcd here.
-            Primitive::Rational(a, b) => Value::Number(Number::Rational(*a, *b as i32)),
+            Primitive::Rational(a, b) => Value::Number(Number::Rational(
+                i32::try_from(a).map_err(|_: TryFromBigIntError<()>| {
+                    ErrorData::Anyhow(anyhow::anyhow!(
+                        "integer {} out of range when converted to i32",
+                        a
+                    ))
+                })?,
+                i32::try_from(b).map_err(|_: TryFromBigIntError<()>| {
+                    ErrorData::Anyhow(anyhow::anyhow!(
+                        "integer {} out of range when converted to i32",
+                        b
+                    ))
+                })?,
+            )),
         })
     }
 
@@ -709,13 +733,16 @@ impl<'a, R: RealNumberInternalTrait> Default for Interpreter<'a, R> {
 fn number() -> Result<()> {
     let interpreter = Interpreter::<f32>::new_with_stdlib();
     assert_eq!(
-        interpreter
-            .eval_root_expression(ExpressionBody::Primitive(Primitive::Integer(-1)).into())?,
+        interpreter.eval_root_expression(
+            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(-1))).into()
+        )?,
         Value::Number(Number::Integer(-1))
     );
     assert_eq!(
-        interpreter
-            .eval_root_expression(ExpressionBody::Primitive(Primitive::Rational(1, 3)).into())?,
+        interpreter.eval_root_expression(
+            ExpressionBody::Primitive(Primitive::Rational(BigInt::from(1), BigUint::from(3u32)))
+                .into()
+        )?,
         Value::Number(Number::Rational(1, 3))
     );
     assert_eq!(
@@ -735,8 +762,8 @@ fn arithmetic() -> Result<()> {
         interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("+".to_string()))),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Integer(2)).into()
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into()
             ]
         )))?,
         Value::Number(Number::Integer(3))
@@ -746,8 +773,12 @@ fn arithmetic() -> Result<()> {
         interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("+".to_string()))),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Rational(1, 2)).into()
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                ExpressionBody::Primitive(Primitive::Rational(
+                    BigInt::from(1),
+                    BigUint::from(2u32)
+                ))
+                .into()
             ]
         )))?,
         Value::Number(Number::Rational(3, 2))
@@ -757,7 +788,11 @@ fn arithmetic() -> Result<()> {
         interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("*".to_string()))),
             vec![
-                ExpressionBody::Primitive(Primitive::Rational(1, 2)).into(),
+                ExpressionBody::Primitive(Primitive::Rational(
+                    BigInt::from(1),
+                    BigUint::from(2u32)
+                ))
+                .into(),
                 ExpressionBody::Primitive(Primitive::Real("2.0".to_string())).into(),
             ]
         )))?,
@@ -768,8 +803,8 @@ fn arithmetic() -> Result<()> {
         interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("/".to_string()))),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Integer(0)).into()
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(0))).into()
             ]
         ))),
         Err(ErrorData::Logic(LogicError::DivisionByZero).no_locate()),
@@ -779,7 +814,7 @@ fn arithmetic() -> Result<()> {
         interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("max".to_string()))),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
                 ExpressionBody::Primitive(Primitive::Real("1.3".to_string())).into(),
             ]
         )))?,
@@ -789,7 +824,7 @@ fn arithmetic() -> Result<()> {
         interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("min".to_string()))),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
                 ExpressionBody::Primitive(Primitive::Real("1.3".to_string())).into(),
             ]
         )))?,
@@ -814,14 +849,14 @@ fn arithmetic() -> Result<()> {
     assert_eq!(
         interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("sqrt".to_string()))),
-            vec![ExpressionBody::Primitive(Primitive::Integer(4)).into()]
+            vec![ExpressionBody::Primitive(Primitive::Integer(BigInt::from(4))).into()]
         )))?,
         Value::Number(Number::Real(2.0)),
     );
 
     match interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
         Box::new(Expression::from(ExpressionBody::Symbol("sqrt".to_string()))),
-        vec![ExpressionBody::Primitive(Primitive::Integer(-4)).into()],
+        vec![ExpressionBody::Primitive(Primitive::Integer(BigInt::from(-4))).into()],
     )))? {
         Value::Number(Number::Real(should_be_nan)) => {
             assert!(num_traits::Float::is_nan(should_be_nan))
@@ -837,8 +872,12 @@ fn arithmetic() -> Result<()> {
             interpreter.eval_root_expression(Expression::from(ExpressionBody::ProcedureCall(
                 Box::new(Expression::from(ExpressionBody::Symbol(cmp.to_string()))),
                 vec![
-                    ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                    ExpressionBody::Primitive(Primitive::Rational(1, 1)).into(),
+                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                    ExpressionBody::Primitive(Primitive::Rational(
+                        BigInt::from(1),
+                        BigUint::from(1u32)
+                    ))
+                    .into(),
                     ExpressionBody::Primitive(Primitive::Real("1.0".to_string())).into(),
                 ],
             )))?,
@@ -868,7 +907,7 @@ fn variable_definition() -> Result<()> {
     let program = vec![
         Statement::Definition(Definition::from(DefinitionBody(
             "a".to_string(),
-            ExpressionBody::Primitive(Primitive::Integer(1)).into(),
+            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
         ))),
         Statement::Definition(Definition::from(DefinitionBody(
             "b".to_string(),
@@ -890,11 +929,11 @@ fn variable_assignment() -> Result<()> {
     let program = vec![
         Statement::Definition(Definition::from(DefinitionBody(
             "a".to_string(),
-            ExpressionBody::Primitive(Primitive::Integer(1)).into(),
+            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
         ))),
         Statement::Expression(Expression::from(ExpressionBody::Assignment(
             "a".to_string(),
-            Box::new(ExpressionBody::Primitive(Primitive::Integer(2)).into()),
+            Box::new(ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into()),
         ))),
         Statement::Expression(Expression::from(ExpressionBody::Symbol("a".to_string()))),
     ];
@@ -925,8 +964,8 @@ fn builtin_procedural() -> Result<()> {
                 vec![],
             ))),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Integer(2)).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into(),
             ],
         ))),
     ];
@@ -958,8 +997,8 @@ fn procedure_definition() -> Result<()> {
         Statement::Expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("add".to_string()))),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Integer(2)).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into(),
             ],
         ))),
     ];
@@ -1006,8 +1045,8 @@ fn lambda_call() -> Result<()> {
                 )),
             )),
             vec![
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Integer(2)).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into(),
                 ExpressionBody::Primitive(Primitive::String("something-else".to_string())).into(),
             ],
         ),
@@ -1030,7 +1069,7 @@ fn closure() -> Result<()> {
                 param_fixed![],
                 vec![Definition::from(DefinitionBody(
                     "current".to_string(),
-                    ExpressionBody::Primitive(Primitive::Integer(0)).into(),
+                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(0))).into(),
                 ))],
                 vec![Expression::from(ExpressionBody::Procedure(
                     SchemeProcedure(
@@ -1047,7 +1086,10 @@ fn closure() -> Result<()> {
                                         Expression::from(ExpressionBody::Symbol(
                                             "current".to_string(),
                                         )),
-                                        ExpressionBody::Primitive(Primitive::Integer(1)).into(),
+                                        ExpressionBody::Primitive(Primitive::Integer(
+                                            BigInt::from(1),
+                                        ))
+                                        .into(),
                                     ],
                                 ))),
                             )),
@@ -1094,8 +1136,8 @@ fn condition() -> Result<()> {
             vec![Statement::Expression(Expression::from(
                 ExpressionBody::Conditional(Box::new((
                     ExpressionBody::Primitive(Primitive::Boolean(true)).into(),
-                    ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                    Some(ExpressionBody::Primitive(Primitive::Integer(2)).into()),
+                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                    Some(ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into()),
                 ))),
             ))]
             .iter()
@@ -1107,8 +1149,8 @@ fn condition() -> Result<()> {
             vec![Statement::Expression(Expression::from(
                 ExpressionBody::Conditional(Box::new((
                     ExpressionBody::Primitive(Primitive::Boolean(false)).into(),
-                    ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                    Some(ExpressionBody::Primitive(Primitive::Integer(2)).into()),
+                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                    Some(ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into()),
                 ))),
             ))]
             .iter()
@@ -1138,11 +1180,11 @@ fn local_environment() -> Result<()> {
         ))),
         Statement::Definition(Definition::from(DefinitionBody(
             "a".to_string(),
-            ExpressionBody::Primitive(Primitive::Integer(1)).into(),
+            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
         ))),
         Statement::Expression(Expression::from(ExpressionBody::ProcedureCall(
             Box::new(Expression::from(ExpressionBody::Symbol("adda".to_string()))),
-            vec![ExpressionBody::Primitive(Primitive::Integer(2)).into()],
+            vec![ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into()],
         ))),
     ];
     assert_eq!(
@@ -1189,8 +1231,8 @@ fn procedure_as_data() -> Result<()> {
             ))),
             vec![
                 Expression::from(ExpressionBody::Symbol("add".to_string())),
-                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                ExpressionBody::Primitive(Primitive::Integer(2)).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into(),
             ],
         ))),
     ];
@@ -1205,13 +1247,13 @@ fn procedure_as_data() -> Result<()> {
 #[ignore]
 fn eval_tail_expression() -> Result<()> {
     let expect_result = convert_located(vec![
-        ExpressionBody::Primitive(Primitive::Integer(2)),
-        ExpressionBody::Primitive(Primitive::Integer(5)),
+        ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))),
+        ExpressionBody::Primitive(Primitive::Integer(BigInt::from(5))),
     ]);
     let interpreter = Interpreter::<f32>::new_with_stdlib();
 
     {
-        let expression = ExpressionBody::Primitive(Primitive::Integer(3)).into();
+        let expression = ExpressionBody::Primitive(Primitive::Integer(BigInt::from(3))).into();
         assert_eq!(
             Interpreter::eval_tail_expression(&expression, interpreter.env.clone())?,
             TailExpressionResult::Value::<f32>(Value::Number(Number::Integer(3)))
@@ -1256,7 +1298,7 @@ fn eval_tail_expression() -> Result<()> {
                 Box::new(Expression::from(ExpressionBody::Symbol("+".to_string()))),
                 expect_result.clone(),
             )),
-            Some(ExpressionBody::Primitive(Primitive::Integer(4)).into()),
+            Some(ExpressionBody::Primitive(Primitive::Integer(BigInt::from(4))).into()),
         ))));
         assert_eq!(
             Interpreter::eval_tail_expression(&expression, interpreter.env.clone())?,
@@ -1266,7 +1308,7 @@ fn eval_tail_expression() -> Result<()> {
     {
         let expression = Expression::from(ExpressionBody::Conditional(Box::new((
             ExpressionBody::Primitive(Primitive::Boolean(false)).into(),
-            ExpressionBody::Primitive(Primitive::Integer(4)).into(),
+            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(4))).into(),
             Some(Expression::from(ExpressionBody::ProcedureCall(
                 Box::new(Expression::from(ExpressionBody::Symbol("+".to_string()))),
                 expect_result.clone(),
@@ -1290,8 +1332,10 @@ fn datum_literal() -> Result<()> {
 
     assert_eq!(
         Interpreter::eval_expression(
-            &ExpressionBody::Quote(Box::new(DatumBody::Primitive(Primitive::Integer(1)).into()))
-                .into(),
+            &ExpressionBody::Quote(Box::new(
+                DatumBody::Primitive(Primitive::Integer(BigInt::from(1))).into()
+            ))
+            .into(),
             &interpreter.env,
         )?,
         1.into()
@@ -1306,9 +1350,10 @@ fn datum_literal() -> Result<()> {
     assert_eq!(
         Interpreter::eval_expression(
             &ExpressionBody::Quote(Box::<Datum>::new(
-                DatumBody::Pair(Box::new(list![
-                    DatumBody::Primitive(Primitive::Integer(1)).into()
-                ]))
+                DatumBody::Pair(Box::new(list![DatumBody::Primitive(Primitive::Integer(
+                    BigInt::from(1)
+                ))
+                .into()]))
                 .into()
             ))
             .into(),
@@ -1557,7 +1602,7 @@ fn library_definition() -> Result<()> {
                 LibraryDeclaration::Begin(vec![Statement::Definition(
                     DefinitionBody(
                         "a".to_string(),
-                        ExpressionBody::Primitive(Primitive::Integer(5)).into(),
+                        ExpressionBody::Primitive(Primitive::Integer(BigInt::from(5))).into(),
                     )
                     .into(),
                 )])
@@ -1614,9 +1659,9 @@ fn transformer() -> Result<()> {
             &ExpressionBody::ProcedureCall(
                 Box::new(ExpressionBody::Symbol("foo".to_string()).into()),
                 vec![
-                    ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-                    ExpressionBody::Primitive(Primitive::Integer(2)).into(),
-                    ExpressionBody::Primitive(Primitive::Integer(3)).into(),
+                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into(),
+                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(3))).into(),
                 ],
             )
             .into(),
@@ -1629,9 +1674,9 @@ fn transformer() -> Result<()> {
     //        &ExpressionBody::ProcedureCall(
     //            Box::new(ExpressionBody::Symbol("foo".to_string()).into()),
     //            vec![
-    //                ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-    //                ExpressionBody::Primitive(Primitive::Integer(2)).into(),
-    //                ExpressionBody::Primitive(Primitive::Integer(3)).into(),
+    //                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+    //                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into(),
+    //                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(3))).into(),
     //            ],
     //        )
     //        .into(),
@@ -1640,9 +1685,9 @@ fn transformer() -> Result<()> {
     //    Ok(TailExpressionResult::TailCall(TailCall::Owned(
     //        ExpressionBody::Symbol("+".to_string()).into(),
     //        vec![
-    //            ExpressionBody::Primitive(Primitive::Integer(1)).into(),
-    //            ExpressionBody::Primitive(Primitive::Integer(2)).into(),
-    //            ExpressionBody::Primitive(Primitive::Integer(3)).into(),
+    //            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1))).into(),
+    //            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2))).into(),
+    //            ExpressionBody::Primitive(Primitive::Integer(BigInt::from(3))).into(),
     //        ],
     //        env,
     //        PhantomData

@@ -1,6 +1,7 @@
 use crate::error::*;
 use either::Either;
 use itertools::Itertools;
+use num_bigint::{BigInt, BigUint};
 use std::fmt::Display;
 
 use super::{
@@ -13,8 +14,8 @@ pub enum Primitive {
     String(String),
     Character(char),
     Boolean(bool),
-    Integer(i32),
-    Rational(i32, u32),
+    Integer(BigInt),
+    Rational(BigInt, BigUint),
     Real(String),
 }
 

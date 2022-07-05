@@ -9,6 +9,10 @@ mod macros;
 pub use macros::*;
 mod datum;
 pub use datum::*;
+use num_bigint::BigInt;
+#[cfg(test)]
+use num_bigint::BigUint;
+use num_traits::Zero;
 
 use crate::error::SchemeError;
 pub mod error;
@@ -18,6 +22,7 @@ use crate::{environment::LexicalScope, error::*, parser::lexer::Token};
 use crate::{interpreter::error::LogicError, parser::lexer::TokenData};
 use fmt::Display;
 use itertools::Itertools;
+use std::convert::TryFrom;
 use std::{collections::HashSet, fmt, mem, rc::Rc};
 use std::{
     iter::{repeat, FromIterator, Iterator, Peekable},
@@ -258,7 +263,7 @@ pub enum ExpressionBody {
 
 impl From<i32> for ExpressionBody {
     fn from(integer: i32) -> Self {
-        ExpressionBody::Datum(DatumBody::Primitive(Primitive::Integer(integer)).into())
+        ExpressionBody::Datum(DatumBody::Primitive(Primitive::Integer(integer.into())).into())
     }
 }
 
@@ -972,8 +977,8 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
         let location = datum.location;
         match datum.data {
             DatumBody::Symbol(identifier) => Ok(LibraryNameElement::Identifier(identifier)),
-            DatumBody::Primitive(Primitive::Integer(i)) if i >= 0 => {
-                Ok(LibraryNameElement::Integer(i as u32))
+            DatumBody::Primitive(Primitive::Integer(i)) if i >= BigInt::zero() => {
+                Ok(LibraryNameElement::Integer(u32::try_from(i).unwrap()))
             }
             o => located_error!(SyntaxError::UnexpectedDatum(o.locate(location)), location),
         }
@@ -1053,10 +1058,7 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
                     Ok(DefinitionBody(name, procedure))
                 }
                 other => {
-                    located_error!(
-                        SyntaxError::InvalidDefinition(Datum::from(other)),
-                        location
-                    )
+                    located_error!(SyntaxError::InvalidDefinition(Datum::from(other)), location)
                 }
             },
             other => {
@@ -1280,12 +1282,13 @@ impl<TokenIter: Iterator<Item = Result<Token>>> Parser<TokenIter> {
     }
 
     fn peek_next_token(&mut self) -> Result<Option<&Token>> {
-        match self.lexer.peek() {
-            Some(ret) => match ret {
-                Ok(t) => Ok(Some(t)),
-                Err(e) => Err((*e).clone()),
-            },
-            None => Ok(None),
+        if self.lexer.peek().is_none() {
+            return Ok(None);
+        }
+        if self.lexer.peek().unwrap().is_ok() {
+            Ok(Some(self.lexer.peek().unwrap().as_ref().unwrap()))
+        } else {
+            Err(self.lexer.next().unwrap().unwrap_err())
         }
     }
 
@@ -1347,10 +1350,15 @@ pub fn token_stream_to_parser(
 
 #[test]
 fn integer() -> Result<()> {
-    let tokens = convert_located(vec![TokenData::Primitive(Primitive::Integer(1))]);
+    let tokens = convert_located(vec![TokenData::Primitive(Primitive::Integer(
+        BigInt::from(1),
+    ))]);
     let mut parser = token_stream_to_parser(tokens.into_iter());
     let ast = parser.parse_root()?;
-    assert_eq!(ast, expr_body_to_statement(Primitive::Integer(1).into()));
+    assert_eq!(
+        ast,
+        expr_body_to_statement(Primitive::Integer(BigInt::from(1)).into())
+    );
     Ok(())
 }
 
@@ -1370,12 +1378,15 @@ fn real_number() -> Result<()> {
 
 #[test]
 fn rational() -> Result<()> {
-    let tokens = convert_located(vec![TokenData::Primitive(Primitive::Rational(1, 2))]);
+    let tokens = convert_located(vec![TokenData::Primitive(Primitive::Rational(
+        BigInt::from(1),
+        BigUint::from(2u32),
+    ))]);
     let mut parser = token_stream_to_parser(tokens.into_iter());
     let ast = parser.parse_root()?;
     assert_eq!(
         ast,
-        expr_body_to_statement(Primitive::Rational(1, 2).into())
+        expr_body_to_statement(Primitive::Rational(BigInt::from(1), BigUint::from(2u32)).into())
     );
     Ok(())
 }
@@ -1396,7 +1407,7 @@ fn identifier() -> Result<()> {
 fn vector() -> Result<()> {
     let tokens = convert_located(vec![
         TokenData::VecConsIntro,
-        TokenData::Primitive(Primitive::Integer(1)),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
         TokenData::Primitive(Primitive::Boolean(false)),
         TokenData::RightParen,
     ]);
@@ -1406,7 +1417,7 @@ fn vector() -> Result<()> {
         ast,
         expr_body_to_statement(ExpressionBody::Datum(
             DatumBody::Vector(convert_located(vec![
-                DatumBody::Primitive(Primitive::Integer(1)),
+                DatumBody::Primitive(Primitive::Integer(BigInt::from(1))),
                 DatumBody::Primitive(Primitive::Boolean(false))
             ]))
             .into()
@@ -1434,9 +1445,9 @@ fn procedure_call() -> Result<()> {
     let tokens = convert_located(vec![
         TokenData::LeftParen,
         TokenData::Identifier("+".to_string()),
-        TokenData::Primitive(Primitive::Integer(1)),
-        TokenData::Primitive(Primitive::Integer(2)),
-        TokenData::Primitive(Primitive::Integer(3)),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(2))),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(3))),
         TokenData::RightParen,
     ]);
     let mut parser = token_stream_to_parser(tokens.into_iter());
@@ -1446,9 +1457,9 @@ fn procedure_call() -> Result<()> {
         expr_body_to_statement(ExpressionBody::ProcedureCall(
             Box::new(ExpressionBody::Symbol("+".to_string()).into()),
             vec![
-                Primitive::Integer(1).into(),
-                Primitive::Integer(2).into(),
-                Primitive::Integer(3).into(),
+                Primitive::Integer(BigInt::from(1)).into(),
+                Primitive::Integer(BigInt::from(2)).into(),
+                Primitive::Integer(BigInt::from(3)).into(),
             ]
         ))
     );
@@ -1460,9 +1471,9 @@ fn unmatched_parantheses() {
     let tokens = convert_located(vec![
         TokenData::LeftParen,
         TokenData::Identifier("+".to_string()),
-        TokenData::Primitive(Primitive::Integer(1)),
-        TokenData::Primitive(Primitive::Integer(2)),
-        TokenData::Primitive(Primitive::Integer(3)),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(2))),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(3))),
     ]);
     let mut parser = token_stream_to_parser(tokens.into_iter());
     assert_eq!(
@@ -1479,7 +1490,7 @@ fn definition() -> Result<()> {
                 TokenData::LeftParen,
                 TokenData::Identifier("define".to_string()),
                 TokenData::Identifier("a".to_string()),
-                TokenData::Primitive(Primitive::Integer(1)),
+                TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
                 TokenData::RightParen,
             ]);
             let mut parser = token_stream_to_parser(tokens.into_iter());
@@ -1488,7 +1499,7 @@ fn definition() -> Result<()> {
                 ast,
                 def_body_to_statement(DefinitionBody(
                     "a".to_string(),
-                    Primitive::Integer(1).into()
+                    Primitive::Integer(BigInt::from(1)).into()
                 ))
             );
         }
@@ -1562,11 +1573,11 @@ fn nested_procedure_call() -> Result<()> {
     let tokens = convert_located(vec![
         TokenData::LeftParen,
         TokenData::Identifier("+".to_string()),
-        TokenData::Primitive(Primitive::Integer(1)),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
         TokenData::LeftParen,
         TokenData::Identifier("-".to_string()),
-        TokenData::Primitive(Primitive::Integer(2)),
-        TokenData::Primitive(Primitive::Integer(3)),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(2))),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(3))),
         TokenData::RightParen,
         TokenData::RightParen,
     ]);
@@ -1577,10 +1588,13 @@ fn nested_procedure_call() -> Result<()> {
         expr_body_to_statement(ExpressionBody::ProcedureCall(
             Box::new(ExpressionBody::Symbol("+".to_string()).into()),
             vec![
-                Primitive::Integer(1).into(),
+                Primitive::Integer(BigInt::from(1)).into(),
                 ExpressionBody::ProcedureCall(
                     Box::new(ExpressionBody::Symbol("-".to_string()).into()),
-                    vec![Primitive::Integer(2).into(), Primitive::Integer(3).into()]
+                    vec![
+                        Primitive::Integer(BigInt::from(2)).into(),
+                        Primitive::Integer(BigInt::from(3)).into()
+                    ]
                 )
                 .into(),
             ]
@@ -1634,7 +1648,7 @@ fn lambda() -> Result<()> {
             TokenData::LeftParen,
             TokenData::Identifier("define".to_string()),
             TokenData::Identifier("y".to_string()),
-            TokenData::Primitive(Primitive::Integer(1)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
             TokenData::RightParen,
             TokenData::LeftParen,
             TokenData::Identifier("+".to_string()),
@@ -1652,7 +1666,7 @@ fn lambda() -> Result<()> {
                     param_fixed!["x".to_string()],
                     vec![Definition::from(DefinitionBody(
                         "y".to_string(),
-                        Primitive::Integer(1).into()
+                        Primitive::Integer(BigInt::from(1)).into()
                     ))],
                     vec![ExpressionBody::ProcedureCall(
                         Box::new(ExpressionBody::Symbol("+".to_string()).into()),
@@ -1678,7 +1692,7 @@ fn lambda() -> Result<()> {
             TokenData::LeftParen,
             TokenData::Identifier("define".to_string()),
             TokenData::Identifier("y".to_string()),
-            TokenData::Primitive(Primitive::Integer(1)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
             TokenData::RightParen,
             TokenData::RightParen,
         ]);
@@ -1737,8 +1751,8 @@ fn conditional() -> Result<()> {
         TokenData::LeftParen,
         TokenData::Identifier("if".to_string()),
         TokenData::Primitive(Primitive::Boolean(true)),
-        TokenData::Primitive(Primitive::Integer(1)),
-        TokenData::Primitive(Primitive::Integer(2)),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
+        TokenData::Primitive(Primitive::Integer(BigInt::from(2))),
         TokenData::RightParen,
     ]);
     let mut parser = token_stream_to_parser(tokens.into_iter());
@@ -1747,8 +1761,8 @@ fn conditional() -> Result<()> {
         Some(Statement::Expression(
             ExpressionBody::Conditional(Box::new((
                 Primitive::Boolean(true).into(),
-                Primitive::Integer(1).into(),
-                Some(Primitive::Integer(2).into())
+                Primitive::Integer(BigInt::from(1)).into(),
+                Some(Primitive::Integer(BigInt::from(2)).into())
             )))
             .into()
         ))
@@ -1765,7 +1779,7 @@ fn import_set() -> Result<()> {
             TokenData::Identifier("import".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("foo".to_string()),
-            TokenData::Primitive(Primitive::Integer(5)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(5))),
             TokenData::RightParen,
             TokenData::RightParen,
         ]);
@@ -1789,7 +1803,7 @@ fn import_set() -> Result<()> {
             TokenData::Identifier("only".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("foo".to_string()),
-            TokenData::Primitive(Primitive::Integer(5)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(5))),
             TokenData::RightParen,
             TokenData::Identifier("a".to_string()),
             TokenData::RightParen,
@@ -1819,7 +1833,7 @@ fn import_set() -> Result<()> {
             TokenData::Identifier("except".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("foo".to_string()),
-            TokenData::Primitive(Primitive::Integer(5)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(5))),
             TokenData::RightParen,
             TokenData::Identifier("a".to_string()),
             TokenData::Identifier("b".to_string()),
@@ -1850,7 +1864,7 @@ fn import_set() -> Result<()> {
             TokenData::Identifier("prefix".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("foo".to_string()),
-            TokenData::Primitive(Primitive::Integer(5)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(5))),
             TokenData::RightParen,
             TokenData::Identifier("a-".to_string()),
             TokenData::RightParen,
@@ -1880,7 +1894,7 @@ fn import_set() -> Result<()> {
             TokenData::Identifier("rename".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("foo".to_string()),
-            TokenData::Primitive(Primitive::Integer(5)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(5))),
             TokenData::RightParen,
             TokenData::LeftParen,
             TokenData::Identifier("a".to_string()),
@@ -1991,19 +2005,19 @@ fn literals() -> Result<()> {
     {
         let tokens = convert_located(vec![
             TokenData::Quote,
-            TokenData::Primitive(Primitive::Integer(1)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
             TokenData::Quote,
             TokenData::Identifier("a".to_string()),
             TokenData::Quote,
             TokenData::LeftParen,
-            TokenData::Primitive(Primitive::Integer(1)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
             TokenData::RightParen,
             TokenData::VecConsIntro,
-            TokenData::Primitive(Primitive::Integer(1)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
             TokenData::RightParen,
             TokenData::Quote,
             TokenData::VecConsIntro,
-            TokenData::Primitive(Primitive::Integer(1)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
             TokenData::RightParen,
         ]);
         let parser = token_stream_to_parser(tokens.into_iter());
@@ -2013,7 +2027,7 @@ fn literals() -> Result<()> {
             vec![
                 Statement::Expression(
                     ExpressionBody::Quote(Box::new(
-                        DatumBody::Primitive(Primitive::Integer(1)).into()
+                        DatumBody::Primitive(Primitive::Integer(BigInt::from(1))).into()
                     ))
                     .into()
                 ),
@@ -2024,7 +2038,7 @@ fn literals() -> Result<()> {
                 Statement::Expression(
                     ExpressionBody::Quote(Box::new(
                         DatumBody::Pair(Box::new(list!(DatumBody::Primitive(Primitive::Integer(
-                            1
+                            BigInt::from(1)
                         ))
                         .no_locate())))
                         .into()
@@ -2033,18 +2047,20 @@ fn literals() -> Result<()> {
                 ),
                 Statement::Expression(
                     ExpressionBody::Datum(
-                        DatumBody::Vector(vec![
-                            DatumBody::Primitive(Primitive::Integer(1)).no_locate()
-                        ])
+                        DatumBody::Vector(vec![DatumBody::Primitive(Primitive::Integer(
+                            BigInt::from(1)
+                        ))
+                        .no_locate()])
                         .into()
                     )
                     .into()
                 ),
                 Statement::Expression(
                     ExpressionBody::Quote(Box::new(
-                        DatumBody::Vector(vec![
-                            DatumBody::Primitive(Primitive::Integer(1)).no_locate()
-                        ])
+                        DatumBody::Vector(vec![DatumBody::Primitive(Primitive::Integer(
+                            BigInt::from(1)
+                        ))
+                        .no_locate()])
                         .into()
                     ))
                     .into()
@@ -2138,7 +2154,7 @@ fn library_name() -> Result<()> {
             TokenData::Identifier("import".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("f".to_string()),
-            TokenData::Primitive(Primitive::Integer(5)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(5))),
             TokenData::RightParen,
             TokenData::RightParen,
         ]);
@@ -2160,7 +2176,7 @@ fn library_name() -> Result<()> {
             TokenData::Identifier("import".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("f".to_string()),
-            TokenData::Primitive(Primitive::Integer(-5)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(-5))),
             TokenData::RightParen,
             TokenData::RightParen,
         ]);
@@ -2404,7 +2420,7 @@ fn library() {
             TokenData::Identifier("define-library".to_string()),
             TokenData::LeftParen,
             TokenData::Identifier("lib-a".to_string()),
-            TokenData::Primitive(Primitive::Integer(0)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(0))),
             TokenData::Identifier("base".to_string()),
             TokenData::RightParen,
             TokenData::LeftParen,
@@ -2418,12 +2434,12 @@ fn library() {
             TokenData::LeftParen,
             TokenData::Identifier("define".to_string()),
             TokenData::Identifier("c".to_string()),
-            TokenData::Primitive(Primitive::Integer(0)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(0))),
             TokenData::RightParen,
             TokenData::LeftParen,
             TokenData::Identifier("define".to_string()),
             TokenData::Identifier("d".to_string()),
-            TokenData::Primitive(Primitive::Integer(1)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
             TokenData::RightParen,
             TokenData::RightParen,
             TokenData::LeftParen,
@@ -2441,7 +2457,7 @@ fn library() {
             TokenData::LeftParen,
             TokenData::Identifier("define".to_string()),
             TokenData::Identifier("f".to_string()),
-            TokenData::Primitive(Primitive::Integer(2)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(2))),
             TokenData::RightParen,
             TokenData::RightParen,
             TokenData::RightParen,
@@ -2470,14 +2486,16 @@ fn library() {
                             Statement::Definition(
                                 DefinitionBody(
                                     "c".to_string(),
-                                    ExpressionBody::Primitive(Primitive::Integer(0)).into()
+                                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(0)))
+                                        .into()
                                 )
                                 .into()
                             ),
                             Statement::Definition(
                                 DefinitionBody(
                                     "d".to_string(),
-                                    ExpressionBody::Primitive(Primitive::Integer(1)).into()
+                                    ExpressionBody::Primitive(Primitive::Integer(BigInt::from(1)))
+                                        .into()
                                 )
                                 .into()
                             )
@@ -2492,7 +2510,8 @@ fn library() {
                         LibraryDeclaration::Begin(vec![Statement::Definition(
                             DefinitionBody(
                                 "f".to_string(),
-                                ExpressionBody::Primitive(Primitive::Integer(2)).into()
+                                ExpressionBody::Primitive(Primitive::Integer(BigInt::from(2)))
+                                    .into()
                             )
                             .into()
                         ),])

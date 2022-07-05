@@ -73,14 +73,28 @@ impl<T> DerefMut for Located<T> {
         &mut self.data
     }
 }
-#[derive(PartialEq, Error, Clone)]
+#[derive(Error)]
 pub enum ErrorData {
     #[error("syntax error: {0}")]
     Syntax(#[from] SyntaxError),
     #[error(transparent)]
     Logic(#[from] LogicError),
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
     #[error("io error: {0}")]
     IO(String), // std::io::Error does not implement PartialEq and Clone, so use display message directly
+}
+
+impl PartialEq for ErrorData {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Syntax(l0), Self::Syntax(r0)) => l0 == r0,
+            (Self::Logic(l0), Self::Logic(r0)) => l0 == r0,
+            (Self::Anyhow(_), Self::Anyhow(_)) => false,
+            (Self::IO(l0), Self::IO(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
 }
 
 pub type SchemeError = Located<ErrorData>;

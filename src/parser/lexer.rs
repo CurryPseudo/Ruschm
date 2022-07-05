@@ -1,4 +1,9 @@
 #![allow(dead_code)]
+#[cfg(test)]
+use num_bigint::BigInt;
+use num_bigint::BigUint;
+use num_traits::Zero;
+
 use crate::error::*;
 use std::fmt;
 use std::iter::Iterator;
@@ -96,10 +101,7 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                         '\\' => match self.advance(1).take() {
                             Some(cnn) => Ok(Some(TokenData::Primitive(Primitive::Character(cnn)))),
                             None => {
-                                located_error!(
-                                    SyntaxError::UnexpectedEnd,
-                                    Some(self.location)
-                                )
+                                located_error!(SyntaxError::UnexpectedEnd, Some(self.location))
                             }
                         },
                         'u' => {
@@ -108,17 +110,11 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                             {
                                 Ok(Some(TokenData::ByteVecConsIntro))
                             } else {
-                                located_error!(
-                                    SyntaxError::UnrecognizedToken,
-                                    Some(self.location)
-                                )
+                                located_error!(SyntaxError::UnrecognizedToken, Some(self.location))
                             }
                         }
                         _ => {
-                            located_error!(
-                                SyntaxError::UnrecognizedToken,
-                                Some(self.location)
-                            )
+                            located_error!(SyntaxError::UnrecognizedToken, Some(self.location))
                         }
                     },
                     None => located_error!(SyntaxError::UnexpectedEnd, Some(self.location)),
@@ -445,28 +441,29 @@ impl<CharIter: Iterator<Item = char>> Lexer<CharIter> {
                                 self.advance(1);
                                 self.digital10(&mut denominator)?;
                                 break Ok(Some(TokenData::Primitive(Primitive::Rational(
-                                    number_literal.parse::<i32>().unwrap(),
-                                    match denominator.parse::<u32>().unwrap() {
-                                        0 => {
+                                    number_literal.parse().unwrap(),
+                                    {
+                                        let denominator: BigUint = denominator.parse().unwrap();
+                                        if denominator.is_zero() {
                                             return located_error!(
                                                 SyntaxError::RationalDivideByZero,
                                                 Some(self.location)
-                                            )
+                                            );
                                         }
-                                        other => other,
+                                        denominator
                                     },
                                 ))));
                             }
                             _ => {
                                 Self::test_delimiter(Some(self.location), *nc)?;
                                 break Ok(Some(TokenData::Primitive(Primitive::Integer(
-                                    number_literal.parse::<i32>().unwrap(),
+                                    number_literal.parse().unwrap(),
                                 ))));
                             }
                         },
                         None => {
                             break Ok(Some(TokenData::Primitive(Primitive::Integer(
-                                number_literal.parse::<i32>().unwrap(),
+                                number_literal.parse().unwrap(),
                             ))))
                         }
                     }
@@ -582,9 +579,9 @@ fn number() -> Result<()> {
             "
         )?,
         vec![
-            TokenData::Primitive(Primitive::Integer(123)),
-            TokenData::Primitive(Primitive::Integer(123)),
-            TokenData::Primitive(Primitive::Integer(-123)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(123))),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(123))),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(-123))),
             TokenData::Primitive(Primitive::Real("1.23".to_string())),
             TokenData::Primitive(Primitive::Real("-12.34".to_string())),
             TokenData::Primitive(Primitive::Real("1.".to_string())),
@@ -595,9 +592,9 @@ fn number() -> Result<()> {
             TokenData::Primitive(Primitive::Real("1.3e20".to_string())),
             TokenData::Primitive(Primitive::Real("-43.e-12".to_string())),
             TokenData::Primitive(Primitive::Real("+.12e+12".to_string())),
-            TokenData::Primitive(Primitive::Rational(1, 2)),
-            TokenData::Primitive(Primitive::Rational(1, 2)),
-            TokenData::Primitive(Primitive::Rational(-32, 3)),
+            TokenData::Primitive(Primitive::Rational(BigInt::from(1), BigUint::from(2u32))),
+            TokenData::Primitive(Primitive::Rational(BigInt::from(1), BigUint::from(2u32))),
+            TokenData::Primitive(Primitive::Rational(BigInt::from(-32), BigUint::from(3u32))),
         ]
     );
     assert_eq!(
@@ -619,11 +616,11 @@ fn delimiter() -> Result<()> {
         vec![
             TokenData::LeftParen,
             TokenData::Identifier(String::from("-")),
-            TokenData::Primitive(Primitive::Integer(4)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(4))),
             TokenData::LeftParen,
             TokenData::Identifier(String::from("+")),
-            TokenData::Primitive(Primitive::Integer(1)),
-            TokenData::Primitive(Primitive::Integer(2)),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(1))),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(2))),
             TokenData::RightParen,
             TokenData::RightParen,
             TokenData::Identifier(String::from("...")),
@@ -639,8 +636,8 @@ fn comment() -> Result<()> {
         tokenize("abcd;+-12\n 12;dew\r34")?,
         vec![
             TokenData::Identifier(String::from("abcd")),
-            TokenData::Primitive(Primitive::Integer(12)),
-            TokenData::Primitive(Primitive::Integer(34))
+            TokenData::Primitive(Primitive::Integer(BigInt::from(12))),
+            TokenData::Primitive(Primitive::Integer(BigInt::from(34)))
         ]
     );
     Ok(())
